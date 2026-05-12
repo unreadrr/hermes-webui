@@ -4025,8 +4025,29 @@ function syncTopbar(){
   const _topbarMeta=$('topbarMeta');
   if(_topbarMeta){
     const sourceLabel=(S.session&&S.session.is_cli_session&&(S.session.source_label||S.session.source_tag||S.session.raw_source))||'';
-    const metaText=t('n_messages',vis.length);
+    // personal: when /api/session returned a truncated tail (msg_limit window),
+    // signal "there's more above" by suffixing the count with "+" and expose
+    // the precise total via title= so power users can hover for the breakdown.
+    // The server includes _messages_truncated + _messages_offset; full total
+    // = _messages_offset + S.messages.length.  Without this the badge shows a
+    // misleading count tied to the lazy-load window size (e.g. "15 сообщений"
+    // when the session actually has 350+ user/assistant turns on disk).
+    const _msgTruncated=!!(S.session&&S.session._messages_truncated);
+    const _msgOffset=(S.session&&Number(S.session._messages_offset))||0;
+    const _msgsLoaded=Array.isArray(S.messages)?S.messages.length:0;
+    const _totalAll=_msgOffset+_msgsLoaded;
+    const _ratio=_msgsLoaded>0?(vis.length/_msgsLoaded):0;
+    const _visEst=_totalAll>0?Math.round(_totalAll*_ratio):vis.length;
+    const _badgeCount=_msgTruncated?(vis.length+'+'):vis.length;
+    const metaText=t('n_messages',_badgeCount);
     _topbarMeta.textContent=metaText;
+    try {
+      if(_msgTruncated){
+        _topbarMeta.title=vis.length+' loaded / ~'+_visEst+' total non-tool · '+_totalAll+' total messages (incl. tool calls)';
+      } else {
+        _topbarMeta.title='';
+      }
+    } catch (e) {}
     if(sourceLabel){
       const badge=document.createElement('span');
       badge.className='topbar-source-badge';
