@@ -4032,10 +4032,20 @@ function syncTopbar(){
     // = _messages_offset + S.messages.length.  Without this the badge shows a
     // misleading count tied to the lazy-load window size (e.g. "15 сообщений"
     // when the session actually has 350+ user/assistant turns on disk).
-    const _msgTruncated=!!(S.session&&S.session._messages_truncated);
-    const _msgOffset=(S.session&&Number(S.session._messages_offset))||0;
+    // Detect a truncated/paginated view in two ways: either sessions.js
+    // explicitly mirrored the _messages_truncated flag from a msg_limit
+    // fetch, OR Phase-1 metadata reports message_count > what's loaded
+    // in S.messages (covers INFLIGHT streaming restore, which bypasses
+    // _ensureMessagesLoaded and never sets the flag).  Either signal is
+    // sufficient to render the '+' affordance and a precise tooltip.
+    const _msgFlagTruncated=!!(S.session&&S.session._messages_truncated);
+    const _msgOffsetMeta=(S.session&&Number(S.session._messages_offset))||0;
+    const _msgCountTotal=(S.session&&Number(S.session.message_count))||0;
     const _msgsLoaded=Array.isArray(S.messages)?S.messages.length:0;
-    const _totalAll=_msgOffset+_msgsLoaded;
+    const _msgsMissing=Math.max(0,_msgCountTotal-_msgsLoaded);
+    const _msgTruncated=_msgFlagTruncated||_msgsMissing>0;
+    const _msgOffset=_msgOffsetMeta||_msgsMissing;
+    const _totalAll=Math.max(_msgCountTotal,_msgOffset+_msgsLoaded);
     const _ratio=_msgsLoaded>0?(vis.length/_msgsLoaded):0;
     const _visEst=_totalAll>0?Math.round(_totalAll*_ratio):vis.length;
     const _badgeCount=_msgTruncated?(vis.length+'+'):vis.length;
