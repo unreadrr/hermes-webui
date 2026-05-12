@@ -5134,21 +5134,14 @@ function renderMessages(options){
       }
     }
     // personal: when the anchor isn't in the currently-rendered window
-    // (e.g. paginated tail where compression happened far above the loaded
-    // 30 messages), prepend the banner instead of dropping it at the bottom.
-    // The bottom-appendChild path confuses users into thinking a new
-    // compression event happened after the last assistant turn.
-    if(fallbackPosition==='top'){
-      const loadOlder=inner.querySelector('#loadOlderIndicator');
-      if(loadOlder && loadOlder.nextSibling){
-        inner.insertBefore(node, loadOlder.nextSibling);
-        return;
-      }
-      if(inner.firstChild){
-        inner.insertBefore(node, inner.firstChild);
-        return;
-      }
-    }
+    // and the caller said fallbackPosition='skip', drop the node silently.
+    // Used for the session-level compression reference banner so it only
+    // appears in its true timeline position (next to the anchored message)
+    // once the user scrolls up and the anchor message loads.  The
+    // 'Load earlier messages (N hidden)' indicator already signals that
+    // older history exists; a permanent always-visible banner masks future
+    // live-compression cards and confuses the timeline.
+    if(fallbackPosition==='skip') return;
     inner.appendChild(node);
   }
   function _insertCompressionLikeNodeByRawIdx(node, rawIdx){
@@ -5199,9 +5192,12 @@ function renderMessages(options){
   const handoffSummaryStates=_collectHandoffSummaryStates(S.messages);
 
   _insertCompressionLikeNode(compressionNode);
-  // personal: anchor banner falls back to top of chat (not bottom) when the
-  // anchored message lies outside the loaded render window.
-  _insertCompressionLikeNode(referenceNode, undefined, 'top');
+  // personal: reference banner is timeline-anchored.  If the anchor message
+  // isn't in the loaded render window, skip insertion instead of dropping
+  // it at the bottom (where it falsely implies a fresh compression event
+  // after the last assistant turn).  Reappears at the correct position
+  // once the user scrolls up and the anchor message loads.
+  _insertCompressionLikeNode(referenceNode, undefined, 'skip');
   _insertCompressionLikeNode(preservedOnlyNode, preservedOnlyAnchor);
   _insertCompressionLikeNode(handoffState?_handoffCardsNode(handoffState):null, renderVisWithIdx.length?renderVisWithIdx.length-1:null);
   for(const entry of handoffSummaryStates){
