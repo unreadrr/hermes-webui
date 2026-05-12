@@ -5113,7 +5113,7 @@ function renderMessages(options){
     assistantSegments.set(rawIdx, seg);
   }
 
-  function _insertCompressionLikeNode(node, anchorIndex){
+  function _insertCompressionLikeNode(node, anchorIndex, fallbackPosition){
     if(!node) return;
     const anchorIdx=anchorIndex===undefined?insertionAnchor:anchorIndex;
     if(anchorIdx!==null && renderVisWithIdx[anchorIdx]){
@@ -5130,6 +5130,22 @@ function renderMessages(options){
       const userRow=userRows.get(anchorRawIdx);
       if(userRow && userRow.parentElement){
         userRow.parentElement.insertBefore(node, userRow.nextSibling);
+        return;
+      }
+    }
+    // personal: when the anchor isn't in the currently-rendered window
+    // (e.g. paginated tail where compression happened far above the loaded
+    // 30 messages), prepend the banner instead of dropping it at the bottom.
+    // The bottom-appendChild path confuses users into thinking a new
+    // compression event happened after the last assistant turn.
+    if(fallbackPosition==='top'){
+      const loadOlder=inner.querySelector('#loadOlderIndicator');
+      if(loadOlder && loadOlder.nextSibling){
+        inner.insertBefore(node, loadOlder.nextSibling);
+        return;
+      }
+      if(inner.firstChild){
+        inner.insertBefore(node, inner.firstChild);
         return;
       }
     }
@@ -5183,7 +5199,9 @@ function renderMessages(options){
   const handoffSummaryStates=_collectHandoffSummaryStates(S.messages);
 
   _insertCompressionLikeNode(compressionNode);
-  _insertCompressionLikeNode(referenceNode);
+  // personal: anchor banner falls back to top of chat (not bottom) when the
+  // anchored message lies outside the loaded render window.
+  _insertCompressionLikeNode(referenceNode, undefined, 'top');
   _insertCompressionLikeNode(preservedOnlyNode, preservedOnlyAnchor);
   _insertCompressionLikeNode(handoffState?_handoffCardsNode(handoffState):null, renderVisWithIdx.length?renderVisWithIdx.length-1:null);
   for(const entry of handoffSummaryStates){

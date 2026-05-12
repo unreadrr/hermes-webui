@@ -1089,6 +1089,15 @@ async function _ensureMessagesLoaded(sid) {
   if (!data || !data.session) return;
   _messagesTruncated = !!data.session._messages_truncated;
   _oldestIdx = data.session._messages_offset || 0;
+  // personal: mirror pagination state onto S.session so syncTopbar() (in
+  // ui.js) can render an honest message-count badge.  Without this, the
+  // topbar shows "15 сообщений" for a lazy-loaded tail of a 778-message
+  // session.  The module-private _messagesTruncated/_oldestIdx are scoped
+  // to this file and not reachable from ui.js, so we re-publish them.
+  if(S.session&&S.session.session_id===sid){
+    S.session._messages_truncated = _messagesTruncated;
+    S.session._messages_offset = _oldestIdx;
+  }
   const msgs = (data.session.messages || []).filter(m => m && m.role);
   // Check for tool-call metadata on messages (for tool-call card rendering)
   const hasMessageToolMetadata = msgs.some(m => {
@@ -1163,7 +1172,15 @@ async function _loadOlderMessages() {
     // already reset by the wholesale-replace path, so no rollback needed.
     if (_messagesGeneration !== startGeneration) return;
     const olderMsgs = (data.session.messages || []).filter(m => m && m.role);
-    if (!olderMsgs.length) { _messagesTruncated = false; return; }
+    if (!olderMsgs.length) {
+      _messagesTruncated = false;
+      if(S.session&&S.session.session_id===sid){
+        S.session._messages_truncated = false;
+        S.session._messages_offset = 0;
+      }
+      if(typeof syncTopbar==='function') syncTopbar();
+      return;
+    }
     // Prepend older messages
     // Use $('messages') — the scrollable container (#msgInner is not scrollable).
     const container = $('messages');
@@ -1184,6 +1201,12 @@ async function _loadOlderMessages() {
     _messageRenderWindowSize=_currentMessageRenderWindowSize()+Math.max(addedRenderable, MESSAGE_RENDER_WINDOW_DEFAULT);
     _messagesTruncated = !!data.session._messages_truncated;
     _oldestIdx = data.session._messages_offset || 0;
+    // personal: mirror pagination state onto S.session for the topbar badge.
+    if(S.session&&S.session.session_id===sid){
+      S.session._messages_truncated = _messagesTruncated;
+      S.session._messages_offset = _oldestIdx;
+    }
+    if(typeof syncTopbar==='function') syncTopbar();
     renderMessages({ preserveScroll: true });
     if (container) {
       // Prepending older messages must not teleport the reader. Preserve the
@@ -1255,7 +1278,11 @@ async function _ensureAllMessagesLoaded() {
     _oldestIdx = 0;
     if (S.session && S.session.session_id === sid) {
       S.session.message_count = Number(data.session.message_count || msgs.length);
+      // personal: clear pagination flags on S.session so badge drops the "+".
+      S.session._messages_truncated = false;
+      S.session._messages_offset = 0;
     }
+    if(typeof syncTopbar==='function') syncTopbar();
   } finally {
     _loadingOlder = false;
   }
