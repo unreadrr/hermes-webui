@@ -927,7 +927,7 @@ async function _fetchLiveModels(provider, sel){
  */
 function _checkProviderMismatch(modelId){
   const ap=(window._activeProvider||'').toLowerCase();
-  if(!ap||ap==='custom'||ap==='openrouter') return null; // can't reliably check
+  if(!ap||ap==='custom'||ap.startsWith('custom:')||ap==='openrouter') return null; // can't reliably check
   // @provider: prefixed IDs came from that provider's live model list — no mismatch possible
   if(modelId.startsWith('@')) return null;
   const slash=modelId.indexOf('/');
