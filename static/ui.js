@@ -4048,7 +4048,7 @@ function syncTopbar(){
     const _totalAll=Math.max(_msgCountTotal,_msgOffset+_msgsLoaded);
     const _ratio=_msgsLoaded>0?(vis.length/_msgsLoaded):0;
     const _visEst=_totalAll>0?Math.round(_totalAll*_ratio):vis.length;
-    const _badgeCount=_msgTruncated?(vis.length+'+'):vis.length;
+    const _badgeCount=vis.length;
     const metaText=t('n_messages',_badgeCount);
     _topbarMeta.textContent=metaText;
     try {
