@@ -1430,6 +1430,56 @@ def _resolve_compatible_session_model_state(
     return model, requested_provider, False
 
 
+def _pick_session_model_with_drift_guard(s, body) -> str | None:
+    """Resolve the requested model for a chat-turn, guarding against UI
+    model-picker drift.
+
+    The UI keeps a single global model picker.  When the user switches between
+    sessions without clicking the picker, body["model"] arrives carrying
+    the picker's *last* selection (which may belong to a *different* session).
+    Silently letting that overwrite s.model causes the next agent run to
+    use the wrong model — including the wrong context_length — which can
+    trigger preflight compression early and (in the May 13 incident on session
+    20260513_170136_40dad9) produce an empty/corrupt summary that destroys
+    mid-session context.
+
+    Guard semantics:
+        * If the body's model matches the session's stored model — use it.
+        * If the body omits model entirely — use s.model.
+        * If the body's model differs AND the session already has prior turns
+          AND the body does NOT include "model_explicit": true, treat the
+          mismatch as picker drift, log a warning, and return s.model.
+        * Otherwise (explicit opt-in OR fresh empty session) — use body's model.
+
+    Callers must still pass the result through
+    :func: for active-provider
+    normalisation; this helper only chooses *which* model id to feed in.
+    """
+    body_model = str(body.get("model") or "").strip()
+    session_model = str(getattr(s, "model", "") or "").strip()
+    if not body_model:
+        return session_model or None
+    if not session_model or body_model == session_model:
+        return body_model
+    has_prior_turns = bool(
+        getattr(s, "messages", None)
+        or getattr(s, "context_messages", None)
+        or getattr(s, "pending_user_message", None)
+    )
+    explicit_switch = bool(body.get("model_explicit"))
+    if has_prior_turns and not explicit_switch:
+        logger.warning(
+            "model-picker drift guard: session=%s saved_model=%r body_model=%r "
+            "— keeping saved model. To force-switch, send body.model_explicit=true "
+            "or issue the /model command in chat.",
+            getattr(s, "session_id", "<unknown>"),
+            session_model,
+            body_model,
+        )
+        return session_model
+    return body_model
+
+
 def _resolve_compatible_session_model(model_id: str | None) -> tuple[str, bool]:
     """Return (effective_model, model_was_normalized) for legacy callers."""
     effective_model, _provider, changed = _resolve_compatible_session_model_state(model_id)
@@ -7085,7 +7135,7 @@ def _handle_goal_command(handler, body):
             workspace = str(resolve_trusted_workspace(body.get("workspace") or s.workspace))
         except ValueError as e:
             return bad(handler, str(e))
-        requested_model = body.get("model") or s.model
+        requested_model = _pick_session_model_with_drift_guard(s, body)
         requested_provider = (
             body.get("model_provider")
             if "model_provider" in body
@@ -7115,7 +7165,7 @@ def _handle_goal_command(handler, body):
             except ValueError as e:
                 return bad(handler, str(e))
         if model is None:
-            requested_model = body.get("model") or s.model
+            requested_model = _pick_session_model_with_drift_guard(s, body)
             requested_provider = (
                 body.get("model_provider")
                 if "model_provider" in body
@@ -7190,7 +7240,7 @@ def _handle_chat_start(handler, body, diag=None):
             workspace = _resolve_chat_workspace_with_recovery(s, body.get("workspace"))
         except ValueError as e:
             return bad(handler, str(e))
-        requested_model = body.get("model") or s.model
+        requested_model = _pick_session_model_with_drift_guard(s, body)
         requested_provider = (
             body.get("model_provider")
             if "model_provider" in body
@@ -7281,7 +7331,7 @@ def _handle_chat_sync(handler, body):
     with _get_session_agent_lock(s.session_id):
         s.workspace = workspace
         model, model_provider = _resolve_compatible_session_model_state(
-            body.get("model") or s.model,
+            _pick_session_model_with_drift_guard(s, body),
             body.get("model_provider") if "model_provider" in body else getattr(s, "model_provider", None),
         )[:2]
         s.model = model
