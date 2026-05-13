@@ -1202,6 +1202,24 @@ def _catalog_has_provider(
     )
 
 
+
+def _catalog_has_model(catalog: dict, model: str) -> bool:
+    """Return True if  appears in any catalog group's models[].id.
+
+    Used to avoid the bare-prefix heuristic incorrectly classifying a model as
+    a stale cross-provider reference when it is actually available through a
+    custom_providers entry (e.g. claude-opus-4.7 under custom:kirogateway).
+    """
+    model = str(model or "").strip()
+    if not model:
+        return False
+    for group in catalog.get("groups") or []:
+        for entry in group.get("models") or []:
+            if isinstance(entry, dict) and _catalog_model_id_matches(entry.get("id"), model):
+                return True
+    return False
+
+
 def _model_matches_active_provider_family(
     model: str,
     active_provider: str,
@@ -1355,12 +1373,22 @@ def _resolve_compatible_session_model_state(
             if model_lower.startswith(bare_prefix):
                 model_provider = _normalize_provider_id(bare_prefix)
                 if model_provider and model_provider != active_provider and default_model:
-                    provider_context = (
-                        raw_active_provider
-                        if _should_attach_codex_provider_context(default_model, raw_active_provider, catalog)
-                        else None
-                    )
-                    return default_model, provider_context, True
+                    # personal: catalog-aware guard. The bare-prefix heuristic
+                    # assumes (claude => anthropic, gpt => openai, gemini => google)
+                    # is the only valid routing. That misclassifies legitimate
+                    # model IDs served by custom_providers (e.g. claude-opus-4.7
+                    # under a custom:kirogateway provider) as stale, silently
+                    # swapping them to default_model. If the catalog actually
+                    # lists this model under SOME provider group, it is NOT
+                    # stale — keep it.  See agent.log Preflight model drift to
+                    # sonnet when opus-4.7 was selected.
+                    if not _catalog_has_model(catalog, model):
+                        provider_context = (
+                            raw_active_provider
+                            if _should_attach_codex_provider_context(default_model, raw_active_provider, catalog)
+                            else None
+                        )
+                        return default_model, provider_context, True
                 provider_context = (
                     raw_active_provider
                     if _should_attach_codex_provider_context(model, raw_active_provider, catalog)
