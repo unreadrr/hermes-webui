@@ -1190,6 +1190,31 @@
   :root.dark[data-skin="cream"] .composer-box:focus-within{
     box-shadow:0 0 0 3px var(--focus-glow,var(--accent-bg)),0 4px 16px rgba(0,0,0,.5);
   }
+  /* Chat content max-width — match mockup's 760px centered column.
+   * Default --msg-max is 780, slightly bumped to give bubbles breathing room. */
+  :root[data-skin="cream"]{
+    --msg-max:760px;
+    --msg-rail:0;
+  }
+  /* Activity group expanded — tool cards stack with proper spacing */
+  :root[data-skin="cream"] .tool-call-group-body{
+    padding:6px 0 4px;
+  }
+  :root[data-skin="cream"] .tool-call-group{
+    border-left:0;
+    margin:6px 0;
+  }
+  /* Banner / agent-health-banner — softer M3 corners */
+  :root[data-skin="cream"] .agent-health-banner{
+    border-radius:14px;
+    box-shadow:0 8px 24px rgba(0,0,0,.18);
+  }
+  /* Approval / queue / clarify cards — match composer pill 28px outer radius */
+  :root[data-skin="cream"] .approval-inner,
+  :root[data-skin="cream"] .clarify-card-inner,
+  :root[data-skin="cream"] .queue-card-inner{
+    border-radius:20px;
+  }
   /* Panel head buttons — bigger touch target, M3 hover surface */
   :root[data-skin="cream"] .panel-head-btn{
     width:32px;
