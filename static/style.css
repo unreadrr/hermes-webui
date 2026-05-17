@@ -749,6 +749,41 @@
   :root[data-skin="cream"] .msg-foot:hover{
     opacity:.85;
   }
+  /* Queue card rows — softer divider, hover surface, M3 row feel */
+  :root[data-skin="cream"] .queue-card-row{
+    padding:10px 16px;
+    border-bottom:1px solid var(--border-subtle,var(--border));
+    transition:background .15s;
+  }
+  :root[data-skin="cream"] .queue-card-row:hover{
+    background:var(--surface-2,var(--surface-subtle,rgba(62,44,28,0.05)));
+  }
+  :root[data-skin="cream"] .queue-card-row:last-child{
+    border-bottom:0;
+  }
+  :root[data-skin="cream"] .queue-card-text{
+    font-size:13px;
+  }
+  /* Project tags / labels — pill chips matching the rest of cream */
+  :root[data-skin="cream"] .project-tag,
+  :root[data-skin="cream"] .session-project-chip,
+  :root[data-skin="cream"] .session-tag{
+    border-radius:999px;
+    padding:2px 10px;
+    font-size:11px;
+    font-weight:500;
+    background:var(--surface-2,var(--surface-subtle,rgba(62,44,28,0.06)));
+    border:1px solid var(--border);
+  }
+  /* Inline images inside assistant body — softer shadow + radius */
+  :root[data-skin="cream"] .msg-row[data-role="assistant"] .msg-body img{
+    border-radius:12px;
+    box-shadow:0 2px 8px rgba(62,44,28,0.08);
+    max-width:100%;
+  }
+  :root.dark[data-skin="cream"] .msg-row[data-role="assistant"] .msg-body img{
+    box-shadow:0 2px 8px rgba(0,0,0,0.40);
+  }
   /* M3 typography scale inside assistant body — display/headline/title/body. */
   :root[data-skin="cream"] .msg-row[data-role="assistant"] .msg-body h1{
     font-size:22px;
