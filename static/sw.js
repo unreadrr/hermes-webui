@@ -11,8 +11,9 @@
 // (compression banner anchor + offline debounce + tool naming/scroll +
 //  partial_tool_calls preserved on cancel reload + dual-channel additive
 //  interrupt frontend + smart tool detail renderer w/ github-style diff +
-//  cream skin + micro-animations + composer focus-within glow) — bump.
-const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-cream-anim-2';
+//  cream skin + micro-animations + composer focus-glow + dot-wave +
+//  message slide-in) — bump.
+const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-cream-anim-3';
 
 // Static assets that form the app shell.
 //
