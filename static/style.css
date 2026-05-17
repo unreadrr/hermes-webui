@@ -1097,6 +1097,91 @@
   :root[data-skin="cream"] .token.url{
     color:rgba(244,229,207,0.85);
   }
+  /* ──────────────────────────────────────────────────────────
+   * COMPOSER PILL REWRITE — flatten the two-row composer (textarea
+   * above, footer below) into a single horizontal pill matching the
+   * mockup: 📎 textarea 🎤 send.  Chips (yolo/profile/workspace/
+   * model/reasoning/ctx) move into a secondary context bar ABOVE
+   * the pill, smaller and quieter.
+   *
+   * Strategy: use display:contents to flatten composer-footer's
+   * children into composer-box flex layout.  No DOM changes.
+   * ────────────────────────────────────────────────────────── */
+  :root[data-skin="cream"] .composer-box{
+    display:flex;
+    flex-direction:column;
+    border-radius:28px;
+    padding:6px 6px 6px 6px;
+    background:var(--input-bg,var(--bg));
+    border:1px solid var(--border);
+    transition:border-color .2s,box-shadow .2s;
+    overflow:visible;
+  }
+  /* The chip row above the input — this contains ws/model/effort/yolo/profile */
+  :root[data-skin="cream"] .composer-box .composer-footer{
+    display:flex;
+    flex-direction:row;
+    align-items:center;
+    flex-wrap:wrap;
+    gap:4px;
+    padding:4px 8px 0 8px;
+    order:1;
+    border:0;
+  }
+  :root[data-skin="cream"] .composer-box .composer-left{
+    display:flex;
+    align-items:center;
+    gap:4px;
+    flex-wrap:wrap;
+    flex:1;
+    min-width:0;
+  }
+  :root[data-skin="cream"] .composer-box .composer-right{
+    display:flex;
+    align-items:center;
+    gap:4px;
+    margin-left:auto;
+  }
+  /* The pill input row — textarea + send area */
+  :root[data-skin="cream"] .composer-box textarea#msg{
+    order:2;
+    background:transparent;
+    border:0;
+    padding:8px 16px 10px 16px;
+    font-size:15px;
+    line-height:1.5;
+    min-height:24px;
+    max-height:160px;
+  }
+  /* Pull the attach + voice icons OUT of footer-left into a row
+   * above the textarea so they sit next to it visually */
+  :root[data-skin="cream"] .composer-box .composer-left #btnAttach,
+  :root[data-skin="cream"] .composer-box .composer-left #btnMic,
+  :root[data-skin="cream"] .composer-box .composer-left #btnVoiceMode{
+    order:0;
+  }
+  /* Quiet the chip row borders entirely — they live on a tonal track */
+  :root[data-skin="cream"] .composer-box .composer-footer{
+    background:var(--surface-2,var(--surface-subtle,rgba(62,44,28,0.04)));
+    border-radius:22px;
+    margin:0;
+  }
+  :root.dark[data-skin="cream"] .composer-box .composer-footer{
+    background:rgba(255,248,238,0.04);
+  }
+  /* Send button anchored bottom-right of the pill */
+  :root[data-skin="cream"] .composer-box .composer-right .send-btn,
+  :root[data-skin="cream"] .composer-box .composer-right .cancel-btn{
+    margin-left:auto;
+  }
+  /* Composer focus halo on the whole pill */
+  :root[data-skin="cream"] .composer-box:focus-within{
+    border-color:var(--accent);
+    box-shadow:0 0 0 3px var(--focus-glow,var(--accent-bg)),0 4px 16px rgba(62,44,28,.10);
+  }
+  :root.dark[data-skin="cream"] .composer-box:focus-within{
+    box-shadow:0 0 0 3px var(--focus-glow,var(--accent-bg)),0 4px 16px rgba(0,0,0,.5);
+  }
   /* Panel head buttons — bigger touch target, M3 hover surface */
   :root[data-skin="cream"] .panel-head-btn{
     width:32px;
