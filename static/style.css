@@ -912,6 +912,26 @@
     font-size:11.5px;
     padding:5px 9px;
   }
+  /* Dropdowns / popovers — M3 menu surface */
+  :root[data-skin="cream"] .profile-dropdown,
+  :root[data-skin="cream"] .cmd-dropdown{
+    border-radius:14px;
+    border:1px solid var(--border);
+    box-shadow:0 12px 40px rgba(62,44,28,0.22);
+    background:var(--surface);
+  }
+  :root.dark[data-skin="cream"] .profile-dropdown,
+  :root.dark[data-skin="cream"] .cmd-dropdown{
+    box-shadow:0 12px 40px rgba(0,0,0,0.55);
+  }
+  :root[data-skin="cream"] .profile-dropdown > *,
+  :root[data-skin="cream"] .cmd-dropdown > *{
+    transition:background .12s,color .12s;
+  }
+  :root[data-skin="cream"] .profile-dropdown > *:hover,
+  :root[data-skin="cream"] .cmd-dropdown > *:hover{
+    background:var(--surface-2,var(--surface-subtle,rgba(62,44,28,0.06)));
+  }
   /* M3 typography scale inside assistant body — display/headline/title/body. */
   :root[data-skin="cream"] .msg-row[data-role="assistant"] .msg-body h1{
     font-size:22px;
