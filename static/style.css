@@ -308,9 +308,13 @@
     letter-spacing:-.01em;
   }
   :root[data-skin="cream"] .composer-wrap{
-    background:var(--bg);
+    background:linear-gradient(180deg,transparent 0%,var(--bg) 24px);
     border-top:0;
     padding:14px 20px 18px;
+  }
+  :root[data-skin="cream"] .composer-box{
+    max-width:780px;
+    margin:0 auto;
   }
   /* M3 topbar chips — context, model, effort all use the same chip language. */
   :root[data-skin="cream"] .topbar .chip,
