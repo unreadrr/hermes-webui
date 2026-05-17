@@ -298,6 +298,19 @@
   :root[data-skin="cream"] .topbar{
     background:var(--bg);
     border-bottom:1px solid var(--border);
+    padding:14px 20px;
+    backdrop-filter:none;
+  }
+  :root[data-skin="cream"] .topbar h1,
+  :root[data-skin="cream"] .topbar .session-title{
+    font-size:15px;
+    font-weight:600;
+    letter-spacing:-.01em;
+  }
+  :root[data-skin="cream"] .composer-wrap{
+    background:var(--bg);
+    border-top:0;
+    padding:14px 20px 18px;
   }
   /* M3 topbar chips — context, model, effort all use the same chip language. */
   :root[data-skin="cream"] .topbar .chip,

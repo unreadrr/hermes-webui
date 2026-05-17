@@ -36,8 +36,9 @@
 //  M3 assistant turn surface container +
 //  M3 typography scale (h1/h2/h3, lists, blockquote) +
 //  M3 tool-card surfaces in Activity body + composer textarea polish +
-//  M3 session-item hover + meta polish) — bump.
-const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-m3-rewrite-5';
+//  M3 session-item hover + meta polish +
+//  M3 topbar polish + composer-wrap padding) — bump.
+const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-m3-rewrite-6';
 
 // Static assets that form the app shell.
 //
