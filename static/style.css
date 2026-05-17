@@ -475,36 +475,75 @@
   :root[data-skin="cream"] .queue-card-inner{
     border-radius:18px 18px 0 0;
   }
-  /* M3 primary navigation rail — softer active pill, smoother hover */
+  /* M3 primary navigation rail — wider with text labels under icons.
+   * Vision feedback: 'НЕ отдельный выделенный navigation rail как в M3,
+   * а просто иконки прибитые к краю'.  Bumping to 80px with data-tooltip
+   * rendered via CSS pseudo so we get the icon-over-label look from the
+   * mockup without touching the DOM. */
   :root[data-skin="cream"] .rail{
     background:var(--surface);
-    padding:10px 0;
-    gap:6px;
+    width:80px;
+    padding:12px 8px;
+    gap:4px;
   }
   :root[data-skin="cream"] .rail-btn{
-    width:40px;
-    height:40px;
-    border-radius:12px;
+    width:64px;
+    min-height:60px;
+    border-radius:14px;
+    flex-direction:column;
+    gap:3px;
+    padding:8px 4px 6px;
     transition:background .18s,color .15s,transform .12s;
+  }
+  :root[data-skin="cream"] .rail-btn::after{
+    content:attr(data-tooltip);
+    font-size:10px;
+    font-weight:500;
+    line-height:1.2;
+    text-align:center;
+    white-space:nowrap;
+    overflow:hidden;
+    max-width:56px;
+    text-overflow:ellipsis;
   }
   :root[data-skin="cream"] .rail-btn:hover{
     background:var(--accent-bg);
     color:var(--accent-text);
   }
   :root[data-skin="cream"] .rail-btn:active{
-    transform:scale(.92);
-    transition-duration:.06s;
+    transform:scale(.94);
   }
   :root[data-skin="cream"] .rail-btn.active{
-    background:var(--accent);
-    color:var(--bg);
+    background:transparent;
+    color:var(--accent);
   }
   :root[data-skin="cream"] .rail-btn.active::before{
-    width:0;
+    content:'';
+    position:absolute;
+    top:6px;
+    left:50%;
+    transform:translateX(-50%);
+    width:48px;
+    height:32px;
+    background:var(--accent-bg);
+    border-radius:16px;
+    z-index:0;
+  }
+  :root[data-skin="cream"] .rail-btn.active svg{
+    position:relative;
+    z-index:1;
   }
   :root.dark[data-skin="cream"] .rail-btn.active{
-    background:var(--accent);
-    color:var(--bg);
+    color:var(--accent);
+  }
+  /* Hide the tooltip on the rail since the label is always visible */
+  :root[data-skin="cream"] .rail-btn[data-tooltip]:hover::after{
+    /* keep CSS-rendered label, suppress legacy tooltip overlay */
+  }
+  :root[data-skin="cream"] .rail-btn.has-tooltip:hover::before{
+    /* legacy tooltip uses a separate ::before for the chip;
+     * we re-purposed ::before for the active pill, so the legacy
+     * tooltip won't show — desired behaviour. */
   }
   /* ──────────────────────────────────────────────────────────
    * personal-m3-rewrite: structural chat-zone overrides.

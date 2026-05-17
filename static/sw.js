@@ -45,8 +45,9 @@
 //  M3 scrollbars + focus rings + form inputs +
 //  M3 dialogs + checkboxes + tooltips +
 //  M3 dropdowns / popovers +
-//  M3 project chips + panel head buttons) — bump.
-const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-m3-rewrite-14';
+//  M3 project chips + panel head buttons +
+//  M3 wide rail with text labels (80px)) — bump.
+const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-m3-rewrite-15';
 
 // Static assets that form the app shell.
 //
