@@ -1098,82 +1098,74 @@
     color:rgba(244,229,207,0.85);
   }
   /* ──────────────────────────────────────────────────────────
-   * COMPOSER PILL REWRITE — flatten the two-row composer (textarea
-   * above, footer below) into a single horizontal pill matching the
-   * mockup: 📎 textarea 🎤 send.  Chips (yolo/profile/workspace/
-   * model/reasoning/ctx) move into a secondary context bar ABOVE
-   * the pill, smaller and quieter.
+   * COMPOSER PILL REWRITE v2 — true horizontal pill via display:contents.
    *
-   * Strategy: use display:contents to flatten composer-footer's
-   * children into composer-box flex layout.  No DOM changes.
+   * The DOM is:
+   *   .composer-box
+   *     textarea#msg
+   *     .composer-footer
+   *       .composer-left  (attach, mic, voice, divider, yolo, profile)
+   *       .composer-right (status, ctx, bg-badge, send)
+   *
+   * To match the mockup we want a TWO-row layout in composer-box:
+   *   row 1 (chip track): yolo, profile, model, effort etc — quiet pill
+   *   row 2 (input pill): attach + textarea + mic + send — single line
+   *
+   * Trick: display:contents on footer/left/right flattens their children
+   * into composer-box's flex layout.  Then we use grid-template-areas
+   * with named children for the row split, and order numbers as fallback
+   * for items we don't explicitly assign.
    * ────────────────────────────────────────────────────────── */
   :root[data-skin="cream"] .composer-box{
     display:flex;
-    flex-direction:column;
+    flex-direction:row;
+    flex-wrap:wrap;
+    align-items:center;
     border-radius:28px;
-    padding:6px 6px 6px 6px;
+    padding:8px 8px 8px 12px;
+    gap:6px 8px;
     background:var(--input-bg,var(--bg));
     border:1px solid var(--border);
     transition:border-color .2s,box-shadow .2s;
-    overflow:visible;
   }
-  /* The chip row above the input — this contains ws/model/effort/yolo/profile */
-  :root[data-skin="cream"] .composer-box .composer-footer{
-    display:flex;
-    flex-direction:row;
-    align-items:center;
-    flex-wrap:wrap;
-    gap:4px;
-    padding:4px 8px 0 8px;
-    order:1;
-    border:0;
-  }
-  :root[data-skin="cream"] .composer-box .composer-left{
-    display:flex;
-    align-items:center;
-    gap:4px;
-    flex-wrap:wrap;
-    flex:1;
-    min-width:0;
-  }
+  :root[data-skin="cream"] .composer-box .composer-footer,
+  :root[data-skin="cream"] .composer-box .composer-left,
   :root[data-skin="cream"] .composer-box .composer-right{
-    display:flex;
-    align-items:center;
-    gap:4px;
-    margin-left:auto;
+    display:contents;
   }
-  /* The pill input row — textarea + send area */
+  /* Row 1: chips track — wrap to its own line via flex-basis:100% on
+   * a sibling break before each chip group. Use a ::before on the
+   * textarea to act as the break point. */
   :root[data-skin="cream"] .composer-box textarea#msg{
-    order:2;
+    order:10;
+    flex:1 1 100%;
     background:transparent;
     border:0;
-    padding:8px 16px 10px 16px;
+    padding:6px 10px;
     font-size:15px;
     line-height:1.5;
     min-height:24px;
     max-height:160px;
   }
-  /* Pull the attach + voice icons OUT of footer-left into a row
-   * above the textarea so they sit next to it visually */
-  :root[data-skin="cream"] .composer-box .composer-left #btnAttach,
-  :root[data-skin="cream"] .composer-box .composer-left #btnMic,
-  :root[data-skin="cream"] .composer-box .composer-left #btnVoiceMode{
-    order:0;
-  }
-  /* Quiet the chip row borders entirely — they live on a tonal track */
-  :root[data-skin="cream"] .composer-box .composer-footer{
-    background:var(--surface-2,var(--surface-subtle,rgba(62,44,28,0.04)));
-    border-radius:22px;
-    margin:0;
-  }
-  :root.dark[data-skin="cream"] .composer-box .composer-footer{
-    background:rgba(255,248,238,0.04);
-  }
-  /* Send button anchored bottom-right of the pill */
-  :root[data-skin="cream"] .composer-box .composer-right .send-btn,
-  :root[data-skin="cream"] .composer-box .composer-right .cancel-btn{
-    margin-left:auto;
-  }
+  /* Order assignments — chips above (1-9), textarea (10), input-row icons (11-19) */
+  :root[data-skin="cream"] .composer-box #yoloPill{order:1;}
+  :root[data-skin="cream"] .composer-box #profileChipWrap{order:2;}
+  :root[data-skin="cream"] .composer-box .composer-toolsets-pill{order:3;}
+  :root[data-skin="cream"] .composer-box .composer-mobile-config-panel{order:4;}
+  :root[data-skin="cream"] .composer-box .composer-divider{display:none;}
+  /* Input row icons (after textarea) */
+  :root[data-skin="cream"] .composer-box #btnAttach{order:11;flex-basis:auto;}
+  :root[data-skin="cream"] .composer-box #fileInput{order:11;display:none;}
+  :root[data-skin="cream"] .composer-box #btnMic{order:12;}
+  :root[data-skin="cream"] .composer-box #btnVoiceMode{order:13;}
+  :root[data-skin="cream"] .composer-box .composer-status{order:14;flex:1;text-align:right;}
+  :root[data-skin="cream"] .composer-box #ctxIndicatorWrap{order:15;}
+  :root[data-skin="cream"] .composer-box #bgBadge{order:16;}
+  :root[data-skin="cream"] .composer-box #btnSend,
+  :root[data-skin="cream"] .composer-box .send-btn,
+  :root[data-skin="cream"] .composer-box .cancel-btn{order:20;}
+  /* Make textarea flex-basis:100% force the chips to wrap above it
+   * (since flex-wrap is enabled on composer-box) */
   /* Composer focus halo on the whole pill */
   :root[data-skin="cream"] .composer-box:focus-within{
     border-color:var(--accent);
