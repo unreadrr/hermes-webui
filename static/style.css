@@ -379,6 +379,23 @@
   :root[data-skin="cream"] .msg-row[data-role="assistant"] .msg-role{
     gap:10px;
   }
+  /* M3 sidebar search — pill input with bg-2 fill, no border by default,
+   * focus ring on accent.  Matches the mockup's chip-style filter. */
+  :root[data-skin="cream"] .sidebar-search input{
+    border-radius:999px;
+    background:var(--surface-2,var(--surface-subtle,rgba(62,44,28,0.06)));
+    border:1px solid transparent;
+    padding:8px 12px 8px 36px;
+    font-size:13px;
+  }
+  :root[data-skin="cream"] .sidebar-search input:focus{
+    border-color:var(--accent);
+    background:var(--bg);
+    box-shadow:0 0 0 3px var(--accent-bg);
+  }
+  :root[data-skin="cream"] .sidebar-search-icon{
+    left:24px;
+  }
   /* Queue pill — when there are queued mid-stream messages, show as
    * a rounded M3 pill instead of the legacy hard-cornered top-attached
    * tab.  Matches the rest of the cream chip language. */
