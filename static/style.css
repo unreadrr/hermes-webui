@@ -784,6 +784,38 @@
   :root.dark[data-skin="cream"] .msg-row[data-role="assistant"] .msg-body img{
     box-shadow:0 2px 8px rgba(0,0,0,0.40);
   }
+  /* Toast — M3 snackbar pattern: rounded pill, soft accent shadow */
+  :root[data-skin="cream"] .toast{
+    border-radius:14px;
+    padding:12px 16px;
+    box-shadow:0 4px 16px rgba(62,44,28,0.18);
+    font-size:13px;
+  }
+  :root.dark[data-skin="cream"] .toast{
+    box-shadow:0 4px 16px rgba(0,0,0,0.45);
+  }
+  :root[data-skin="cream"] .toast-copy{
+    border-radius:999px;
+    padding:4px 10px;
+    font-weight:600;
+  }
+  /* Empty state — M3 display-large title with proper line-height */
+  :root[data-skin="cream"] .empty-state{
+    gap:14px;
+    padding:48px;
+  }
+  :root[data-skin="cream"] .empty-state h2{
+    font-size:24px;
+    font-weight:700;
+    letter-spacing:-.02em;
+    line-height:1.2;
+  }
+  :root[data-skin="cream"] .empty-state p{
+    font-size:14px;
+    line-height:1.5;
+    max-width:380px;
+    text-align:center;
+  }
   /* M3 typography scale inside assistant body — display/headline/title/body. */
   :root[data-skin="cream"] .msg-row[data-role="assistant"] .msg-body h1{
     font-size:22px;
