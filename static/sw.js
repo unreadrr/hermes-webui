@@ -41,8 +41,9 @@
 //  M3 thinking card + attach-tray pills +
 //  M3 sidebar header + msg actions + links polish +
 //  M3 queue card rows + project tags +
-//  M3 toast snackbar + empty state typography) — bump.
-const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-m3-rewrite-10';
+//  M3 toast snackbar + empty state typography +
+//  M3 scrollbars + focus rings + form inputs) — bump.
+const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-m3-rewrite-11';
 
 // Static assets that form the app shell.
 //
