@@ -257,6 +257,34 @@
   :root[data-skin="cream"] .tool-card{border-radius:14px;}
   :root[data-skin="cream"] .tool-card:hover{box-shadow:0 2px 6px rgba(62,44,28,0.10);}
   :root.dark[data-skin="cream"] .tool-card:hover{box-shadow:0 2px 6px rgba(0,0,0,0.40);}
+  /* M3 message actions — always faintly visible, full opacity on hover.
+   * Operator complaint: clean look, but copy/retry/fork buttons should be
+   * discoverable without hovering each row.  Mockup approach: opacity .55
+   * baseline, .95 on hover.  Cream skin only — default keeps invisible-until-hover. */
+  :root[data-skin="cream"] .msg-actions{opacity:.55;transition:opacity .18s;}
+  :root[data-skin="cream"] .msg-row:hover .msg-actions,
+  :root[data-skin="cream"] .msg-row:focus-within .msg-actions,
+  :root[data-skin="cream"] .assistant-turn:hover .msg-actions,
+  :root[data-skin="cream"] .assistant-turn:focus-within .msg-actions{opacity:.95;}
+  /* Activity pill — pill shape with accent dot, matches mockup */
+  :root[data-skin="cream"] .tool-call-group-summary{
+    background:var(--surface-subtle,rgba(62,44,28,0.025));
+    border:1px solid var(--md-outline-variant,var(--border));
+    border-radius:999px;
+    padding:6px 14px 6px 10px;
+    font-size:12px;
+    font-weight:500;
+    color:var(--muted);
+    width:fit-content;
+    margin:6px 0 8px;
+  }
+  :root[data-skin="cream"] .tool-call-group{border-left:0;}
+  :root[data-skin="cream"] .tool-call-group-duration{
+    font-family:var(--font-mono);
+    font-size:11px;
+    margin-left:6px;
+    opacity:.7;
+  }
   /* Cream-specific: warmer hairline divider on tool-diff num column to
    * match the cream/mocha palette instead of the default blue-ish var. */
   :root[data-skin="cream"] .tool-card-result .tool-diff .diff-num{
