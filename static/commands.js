@@ -898,14 +898,40 @@ function _showSteerIndicator(text){
   if(typeof scrollToBottom==='function') scrollToBottom();
 }
 
+function _showInjectIndicator(text){
+  const inner=document.getElementById('msgInner');
+  if(!inner) return;
+  // Remove any existing inject indicator (one per turn)
+  const old=inner.querySelector('.inject-indicator');
+  if(old) old.remove();
+  const el=document.createElement('div');
+  el.className='inject-indicator';
+  const badge=document.createElement('span');
+  badge.className='inject-badge';
+  badge.textContent='Вы';
+  const body=document.createElement('span');
+  body.className='inject-body';
+  body.textContent=text.length>240?text.slice(0,237)+'…':text;
+  el.appendChild(badge);
+  el.appendChild(body);
+  inner.appendChild(el);
+  if(typeof scrollToBottom==='function') scrollToBottom();
+}
+
 // personal: dual-channel additive interrupt — Devin-style mid-run send.
 // Calls /api/chat/inject which (1) saves the message into a per-stream
 // bucket on the backend so it survives done/cancel/error merge AND (2)
 // best-effort delivers it to the running agent via steer for tool-result
-// boundary injection.  Backend broadcasts a 'user_journaled' SSE event
-// so this same browser tab AND any other tab on the same session sees the
-// message in the transcript instantly.  The msg is rendered optimistically
-// here too so the keystroke→appearance latency is zero.
+// boundary injection.  Backend broadcasts a 'user_journaled' SSE event;
+// the listener also defers to a transient pill while a stream is active
+// so the live DOM (tool cards, partial assistant text) is preserved.
+//
+// We DO NOT optimistically insert into S.messages — that would force a
+// renderMessages() rebuild mid-stream which tears down the live tool
+// cards and partial assistant DOM.  Instead we append a pure-DOM pill
+// (like _showSteerIndicator) that the next renderMessages naturally
+// drops, after which the backend-journaled message is reconciled into
+// S.messages by the 'done' handler that pulls d.session.messages.
 //
 // IMPORTANT: this endpoint requires a webui restart to activate.  When the
 // backend is still running the older code, /api/chat/inject returns 404 or
@@ -916,21 +942,13 @@ function _showSteerIndicator(text){
 // instead of
 //   inject → queue (which silently breaks the steer mode users had)
 async function _tryInject(msg, files){
-  const optimisticTs = Math.floor(Date.now()/1000);
-  // Optimistic UI: drop the user msg into the local transcript immediately
-  // so the operator sees it without waiting for the SSE round-trip.  The
-  // backend's user_journaled event will arrive shortly and de-dup against
-  // this entry by (role, content) identity inside renderMessages.
+  // Optimistic UI: show a transient pill so the operator sees their input
+  // immediately, without touching S.messages or triggering a full
+  // renderMessages (which would destroy the streaming tool cards / partial
+  // assistant DOM mid-flight).  The pill self-clears on the next
+  // renderMessages call (done/cancel/refresh).
   if(S.session){
-    S.messages.push({
-      role:'user',
-      content:msg,
-      timestamp:optimisticTs,
-      _injected:true,
-      _injected_optimistic:true,
-      attachments: files && files.length ? files : undefined,
-    });
-    try{ renderMessages({preserveScroll:true}); }catch(_){}
+    try{ _showInjectIndicator(msg); }catch(_){}
   }
   let result=null;
   try{
@@ -949,16 +967,13 @@ async function _tryInject(msg, files){
   if(result&&result.accepted){
     return {ok:true, steer:!!ch.steer};
   }
-  // Roll back the optimistic insert — _trySteer / queue path will create
-  // its own representation (steer pill, queue badge).
-  if(S.session){
-    const lastIdx=S.messages.length-1;
-    const last=S.messages[lastIdx];
-    if(last && last._injected_optimistic && last.content===msg){
-      S.messages.splice(lastIdx, 1);
-      try{ renderMessages({preserveScroll:true}); }catch(_){}
-    }
-  }
+  // Fallback path — remove the optimistic pill so the steer/queue path
+  // can show its own representation without two indicators stacking.
+  try{
+    const inner=document.getElementById('msgInner');
+    const old=inner&&inner.querySelector('.inject-indicator');
+    if(old) old.remove();
+  }catch(_){}
   const reason=(result&&result.fallback)||'unknown';
   if(reason==='not_running' || reason==='stream_dead'){
     return {ok:false, fallback:'idle'};

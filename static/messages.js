@@ -1640,12 +1640,14 @@ function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
 
     source.addEventListener('user_journaled',e=>{
       // personal: dual-channel additive interrupt — backend confirms a
-      // user message was journaled mid-run.  The same browser tab that
-      // typed it already rendered the optimistic message inside
-      // _tryInject; this listener is for OTHER tabs / browsers viewing
-      // the same session, so they see the operator's input live.
-      // De-dup against any optimistic entry by (role, content) identity
-      // so the same tab doesn't double-render.
+      // user message was journaled mid-run.  CRITICAL: do NOT push to
+      // S.messages and call renderMessages while a stream is active —
+      // that wipes the live tool cards and partial assistant DOM (the
+      // same bug we just fixed in _tryInject).  Strategy:
+      //   - active stream → show a transient pill (DOM-only), the 'done'
+      //     handler will reconcile via d.session.messages later.
+      //   - no active stream (other tab / late delivery) → safe to
+      //     push + re-render.
       if(!S.session||S.session.session_id!==activeSid) return;
       try{
         const d=JSON.parse(e.data||'{}');
@@ -1655,6 +1657,13 @@ function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
           x && x.role===m.role && String(x.content||'')===String(m.content||'')
         );
         if(exists) return;
+        const streamActive=!!S.activeStreamId;
+        if(streamActive){
+          if(typeof _showInjectIndicator==='function'){
+            try{ _showInjectIndicator(String(m.content||'')); }catch(_){}
+          }
+          return;
+        }
         S.messages.push({...m, _injected:true});
         try{ renderMessages({preserveScroll:true}); }catch(_){}
       }catch(err){}
