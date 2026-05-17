@@ -52,8 +52,9 @@
 //  M3 composer pill v2 — display:contents flatten +
 //  M3 composer hairline divider between chip track and input row +
 //  M3 narrower chat column + activity group polish +
-//  M3 DOM rewrite — chips moved to topbar via cream-m3.js) — bump.
-const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-m3-rewrite-22';
+//  M3 DOM rewrite — chips moved to topbar via cream-m3.js +
+//  cream-m3.js — full chip selector audit (workspace/model/reasoning)) — bump.
+const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-m3-rewrite-23';
 
 // Static assets that form the app shell.
 //

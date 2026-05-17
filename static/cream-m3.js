@@ -17,16 +17,26 @@
   'use strict';
 
   const TOPBAR_ID = 'creamM3Topbar';
+  // Audit: real IDs in the live HTML (verified via DOM inspection).
   const CHIP_IDS = [
     'yoloPill',
     'profileChipWrap',
     'composerToolsetsPillBtn',
+    'composerWorkspaceGroup',     // workspace chip
+    'composerModelChip',          // model picker chip
+    'composerReasoningWrap',      // reasoning effort chip
+    'composerMobileConfigPanel',  // mobile cfg fallback
     'composerMobileWorkspaceAction',
     'composerMobileModelAction',
     'composerMobileReasoningAction',
     'composerMobileContextAction',
     'ctxIndicatorWrap',
     'bgBadge',
+  ];
+  // Class-based selectors for elements without IDs (chip wrappers)
+  const CHIP_SELECTORS = [
+    '.composer-ws-wrap',
+    '.composer-model-wrap',
   ];
 
   // Original parents — recorded on first move so we can restore on skin change
@@ -52,14 +62,28 @@
     return topbar;
   }
 
+  function _collect() {
+    const out = [];
+    for (const id of CHIP_IDS) {
+      const el = document.getElementById(id);
+      if (el) out.push(el);
+    }
+    for (const sel of CHIP_SELECTORS) {
+      for (const el of document.querySelectorAll(sel)) {
+        if (!out.includes(el)) out.push(el);
+      }
+    }
+    return out;
+  }
+
   function moveChipsToTopbar() {
     const topbar = ensureTopbar();
     if (!topbar) return;
 
-    for (const id of CHIP_IDS) {
-      const el = document.getElementById(id);
-      if (!el) continue;
+    for (const el of _collect()) {
       if (el.parentElement === topbar) continue;
+      // Skip if already a descendant of an already-moved wrapper (avoid double-move)
+      if (topbar.contains(el)) continue;
       // Record original parent + position for reversal
       if (!_originalParents.has(el)) {
         _originalParents.set(el, {
@@ -73,9 +97,7 @@
   }
 
   function restoreChipsToComposer() {
-    for (const id of CHIP_IDS) {
-      const el = document.getElementById(id);
-      if (!el) continue;
+    for (const el of _collect()) {
       const orig = _originalParents.get(el);
       if (!orig || !orig.parent) continue;
       try {
