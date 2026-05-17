@@ -29,8 +29,9 @@
 //  freeze live turn before pill (correct chronological order) +
 //  M3 sidebar search pill +
 //  M3 date group headers +
-//  M3 approval card + queue card softer corners) — bump.
-const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-approval-pill';
+//  M3 approval card + queue card softer corners +
+//  M3 send-FAB 40x40 with proper elevation) — bump.
+const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-send-fab';
 
 // Static assets that form the app shell.
 //
