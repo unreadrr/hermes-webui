@@ -12,7 +12,8 @@
     --radius-sm:4px;--radius-md:8px;--radius-card:8px;--radius-lg:12px;--radius-pill:999px;
     --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;
     --font-size-xs:11px;--font-size-sm:12px;--font-size-md:14px;
-    --font-ui:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,system-ui,sans-serif;
+    --font-ui:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    --font-mono:"JetBrains Mono","SF Mono","Fira Code",ui-monospace,monospace;
     --surface-subtle:rgba(0,0,0,.025);--surface-subtle-hover:rgba(0,0,0,.045);
     --border-subtle:rgba(0,0,0,.08);--border-muted:rgba(0,0,0,.12);
     font-family:var(--font-ui);font-size:14px;line-height:1.6;
@@ -200,19 +201,25 @@
     --user-selection-bg:rgba(196,154,108,0.32);--user-selection-text:#2A1D11;
   }
   :root.dark[data-skin="cream"]{
-    --bg:#15110B;--sidebar:#1B1611;--surface:#1F1812;
-    --border:#3A2D22;--border2:#56432F;
-    --text:#F4E5CF;--muted:#CBB89A;--strong:#FBE7C9;--em:#D9C29F;
-    --accent:#E5C089;--accent-hover:#D4AB6F;--accent-text:#F2E0C2;
-    --accent-bg:rgba(229,192,137,0.10);--accent-bg-strong:rgba(229,192,137,0.20);
-    --code-bg:#2A2018;--code-inline-bg:rgba(255,255,255,0.06);--code-text:#F2E0C2;--pre-text:#F4E5CF;
-    --topbar-bg:rgba(27,22,17,0.96);--main-bg:rgba(21,17,11,0.55);
-    --input-bg:rgba(255,248,238,0.04);--hover-bg:rgba(255,248,238,0.06);
-    --focus-ring:rgba(229,192,137,0.32);--focus-glow:rgba(229,192,137,0.10);
-    --blue:#9BC4DD;--gold:#E5C089;
-    --user-bubble-bg:#2A2018;--user-bubble-border:#3F3026;
-    --user-bubble-text:#F4E5CF;--user-bubble-placeholder:#9F876A;
-    --user-selection-bg:rgba(229,192,137,0.28);--user-selection-text:#FBE7C9;
+    /* Warmer dark mocha — operator feedback: ': темная тема выглядит не
+     * совсем как молочно кофейный'.  Previous values (#15110B / #1F1812)
+     * felt almost-black with a brown tint; bumped red-channel to push the
+     * canvas firmly into mocha territory while keeping enough contrast
+     * for body text.  Surfaces now carry visible brown saturation. */
+    --bg:#1C1611;--sidebar:#231A14;--surface:#2A1F17;
+    --surface-subtle:rgba(255,237,210,0.04);--surface-subtle-hover:rgba(255,237,210,0.07);
+    --border:#3F3026;--border2:#5A4636;--border-subtle:rgba(229,192,137,0.10);--border-muted:rgba(229,192,137,0.18);
+    --text:#F4E5CF;--muted:#C4AB87;--strong:#FBE7C9;--em:#D9C29F;
+    --accent:#E5C089;--accent-hover:#F0CF9F;--accent-text:#F2E0C2;
+    --accent-bg:rgba(229,192,137,0.12);--accent-bg-strong:rgba(229,192,137,0.24);
+    --code-bg:#332518;--code-inline-bg:rgba(255,237,210,0.08);--code-text:#F2E0C2;--pre-text:#F4E5CF;
+    --topbar-bg:rgba(35,26,20,0.96);--main-bg:rgba(28,22,17,0.55);
+    --input-bg:rgba(255,237,210,0.05);--hover-bg:rgba(255,237,210,0.07);
+    --focus-ring:rgba(229,192,137,0.36);--focus-glow:rgba(229,192,137,0.14);
+    --blue:#9BC4DD;--gold:#E5C089;--purple:#C9A8E0;
+    --user-bubble-bg:#3A2C20;--user-bubble-border:#503D2E;
+    --user-bubble-text:#F4E5CF;--user-bubble-placeholder:#A98D6E;
+    --user-selection-bg:rgba(229,192,137,0.32);--user-selection-text:#FBE7C9;
   }
   :root[data-skin="cream"]:not(.dark) .new-chat-btn,
   :root.dark[data-skin="cream"] .new-chat-btn{background:var(--accent);border-color:var(--accent);color:#FFF8EE;font-weight:600;box-shadow:0 1px 2px rgba(62,44,28,0.10);}
