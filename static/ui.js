@@ -12,6 +12,13 @@ const MAX_UPLOAD_MB=Math.round(MAX_UPLOAD_BYTES/1024/1024);
 let _queueDrainSid=null;
 const $=id=>document.getElementById(id);
 const OFFLINE_RECHECK_MS=2500;
+// personal: debounce window before showing offline banner.  When the tab
+// returns from background, in-flight fetches may fail with TypeError once
+// before the connection re-establishes — banner used to flash up
+// immediately ("Hermes пока не доступен… обновим вкладку сами").  Match
+// OpenHands / Telegram / Devin behaviour: probe silently for this window;
+// only show the banner if we genuinely can't reach the server.
+const OFFLINE_BANNER_GRACE_MS=2000;
 let _offlineVisible=false;
 let _offlineReason='browser';
 let _offlineProbeTimer=null;
@@ -20,6 +27,10 @@ let _offlineProbePromise=null;
 let _offlineHealthProbePromise=null;
 let _offlineRawFetch=null;
 let _offlineFetchPatched=false;
+// personal: pending banner-show timer started on first fetch failure;
+// cancelled if a subsequent silent probe succeeds within the grace window.
+let _offlinePendingTimer=null;
+let _offlinePendingReason=null;
 function _browserReportsOnline(){return !('onLine' in navigator)||navigator.onLine!==false;}
 function _offlineHealthUrl(){const url=new URL('health',document.baseURI||location.href);url.searchParams.set('offline_probe',String(Date.now()));return url.href;}
 function _setOfflineChecking(checking){
@@ -47,15 +58,51 @@ function _startOfflineProbeTimer(){
 function _stopOfflineProbeTimer(){
   if(_offlineProbeTimer){clearInterval(_offlineProbeTimer);_offlineProbeTimer=null;}
 }
+// personal: cancel a pending banner-show grace timer.  Called when a
+// silent probe confirms we're still online before the timer fires.
+function _cancelPendingOfflineBanner(){
+  if(_offlinePendingTimer){clearTimeout(_offlinePendingTimer);_offlinePendingTimer=null;}
+  _offlinePendingReason=null;
+}
 function showOfflineBanner(reason){
-  _offlineVisible=true;
-  _offlineReason=reason||(_browserReportsOnline()?'network':'browser');
-  _renderOfflineBanner();
-  _startOfflineProbeTimer();
+  // personal: 'browser' reason (navigator.onLine===false) is authoritative,
+  // show immediately.  'network' reason is a soft signal from a single
+  // fetch failure — debounce so we don't flash the banner on tab-return.
+  const r=reason||(_browserReportsOnline()?'network':'browser');
+  if(r==='browser'){
+    _cancelPendingOfflineBanner();
+    _offlineVisible=true;
+    _offlineReason=r;
+    _renderOfflineBanner();
+    _startOfflineProbeTimer();
+    return;
+  }
+  // Already visible — just re-render in case reason changed.
+  if(_offlineVisible){
+    _offlineReason=r;
+    _renderOfflineBanner();
+    return;
+  }
+  // Pending grace timer already running — keep it.
+  if(_offlinePendingTimer)return;
+  _offlinePendingReason=r;
+  _offlinePendingTimer=setTimeout(async()=>{
+    _offlinePendingTimer=null;
+    // Silent re-probe: if we got online while the grace timer was running,
+    // suppress the banner entirely.  Otherwise commit to showing it.
+    const ok=await _probeOfflineRecovery();
+    if(ok)return;
+    _offlineVisible=true;
+    _offlineReason=_offlinePendingReason||'network';
+    _offlinePendingReason=null;
+    _renderOfflineBanner();
+    _startOfflineProbeTimer();
+  },OFFLINE_BANNER_GRACE_MS);
 }
 function isOfflineBannerVisible(){return _offlineVisible;}
 function _hideOfflineBanner(){
   _offlineVisible=false;
+  _cancelPendingOfflineBanner();
   _stopOfflineProbeTimer();
   _setOfflineChecking(false);
   const banner=$('offlineBanner');
@@ -106,6 +153,21 @@ function initOfflineMonitor(){
   _patchOfflineFetch();
   window.addEventListener('offline',()=>showOfflineBanner('browser'));
   window.addEventListener('online',()=>{if(_offlineVisible)checkOfflineRecoveryNow();});
+  // personal: when the user returns to a backgrounded tab, cancel any
+  // pending offline-banner grace timer and silently re-probe.  This is
+  // the same pattern OpenHands uses (useVisibilityChange + silent
+  // refetch) — see /home/user1/workspace/ui-research/openhands/frontend
+  // /src/hooks/use-sandbox-recovery.ts.  Without this, a tab returning
+  // from background would consistently flash the offline banner because
+  // a single fetch failure during browser resume triggered showOfflineBanner.
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState!=='visible')return;
+    // Cancel any pending banner show — give the connection a chance to
+    // recover before bothering the user.
+    _cancelPendingOfflineBanner();
+    // If banner is already visible, probe immediately (might already be back).
+    if(_offlineVisible)checkOfflineRecoveryNow();
+  });
   if(!_browserReportsOnline())showOfflineBanner('browser');
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initOfflineMonitor,{once:true});

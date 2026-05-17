@@ -8,8 +8,8 @@
 // Cache version is injected by the server at request time (routes.py /sw.js handler).
 // Bumps automatically whenever the git commit changes — no manual edits needed.
 // personal: appended suffix to force cache eviction for uncommitted ui.js fix
-// (compression banner anchor) — bump when reapplying without committing.
-const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-bannerfix-final';
+// (compression banner anchor + offline banner debounce) — bump when reapplying.
+const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-fact1';
 
 // Static assets that form the app shell.
 //
