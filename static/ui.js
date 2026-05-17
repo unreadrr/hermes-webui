@@ -6040,6 +6040,39 @@ function renderMessages(options){
           });
         });
       }
+      // personal: WebUI-internal `_partial_tool_calls` from cancelled turns
+      // (api/streaming.py:5311 cancel_stream → preserves live tool calls under
+      // this private key so they survive cancel + reload).  Without this branch
+      // the entire derivation pass skips them and a stopped turn appears to
+      // have lost its tools entirely on session reload.  Bug user described as
+      // "interrupt стирает всё нахер".
+      if(Array.isArray(m._partial_tool_calls)){
+        m._partial_tool_calls.forEach((tc,tcIdx)=>{
+          if(!tc||typeof tc!=='object') return;
+          const name=tc.name||'tool';
+          const args=tc.args||{};
+          const tid=tc.tid||`partial-${rawIdx}-${tcIdx}`;
+          const argsSnap={};
+          if(args && typeof args==='object'){
+            Object.keys(args).slice(0,4).forEach(k=>{ const v=String(args[k]); argsSnap[k]=v.slice(0,120)+(v.length>120?'...':''); });
+          }
+          derived.push({
+            name,
+            snippet:tc.snippet||tc.preview||'',
+            is_diff:!!tc.is_diff,
+            tid,
+            assistant_msg_idx:rawIdx,
+            args:argsSnap,
+            // tc.done may be undefined / false when cancelled mid-tool —
+            // pass through verbatim so the running-dot stays visible if so.
+            done:tc.done!==false,
+            // Mark partial origin so renderers can dim/badge if desired.
+            _partial:true,
+            duration:tc.duration,
+            is_error:tc.is_error,
+          });
+        });
+      }
     });
     if(derived.length) S.toolCalls=derived;
   }
