@@ -991,6 +991,66 @@
     color:var(--bg);
     border-color:transparent;
   }
+  /* Composer footer compaction — match mockup's clean send-row.
+   * Live has 8+ chips (yolo, profile, workspace, model, reasoning,
+   * ctx-ring) in the footer; mockup only shows attach/voice/send.
+   * We can't move DOM but we CAN visually quiet the noise. */
+  :root[data-skin="cream"] .composer-footer{
+    padding:8px 8px 8px 4px;
+    gap:6px;
+  }
+  :root[data-skin="cream"] .composer-left{
+    gap:4px;
+  }
+  :root[data-skin="cream"] .composer-right{
+    gap:6px;
+  }
+  /* Profile chip compact form — icon + small label, no border */
+  :root[data-skin="cream"] .composer-profile-chip{
+    max-width:140px;
+    padding:5px 10px 5px 8px;
+    font-size:11px;
+    background:transparent;
+    border:1px solid transparent;
+  }
+  :root[data-skin="cream"] .composer-profile-chip:hover{
+    background:var(--surface-2,var(--surface-subtle,rgba(62,44,28,0.05)));
+    border-color:var(--border);
+    transform:none;
+  }
+  /* Composer icon buttons — uniform 32x32 with subtle hover */
+  :root[data-skin="cream"] .composer-footer .icon-btn{
+    width:32px;
+    height:32px;
+    border-radius:10px;
+    transition:background .15s,color .15s,transform .12s;
+  }
+  :root[data-skin="cream"] .composer-footer .icon-btn:hover{
+    background:var(--surface-2,var(--surface-subtle,rgba(62,44,28,0.05)));
+    color:var(--accent);
+  }
+  :root[data-skin="cream"] .composer-footer .icon-btn:active{
+    transform:scale(.92);
+  }
+  /* Hide the dividers — pill chips self-separate */
+  :root[data-skin="cream"] .composer-divider{
+    display:none !important;
+  }
+  /* Composer status — quieter when not actively saying something */
+  :root[data-skin="cream"] .composer-status{
+    font-size:11px;
+    opacity:.6;
+  }
+  /* Ctx indicator — proper M3 progress chip feel */
+  :root[data-skin="cream"] .ctx-indicator{
+    width:32px;
+    height:32px;
+    border-radius:10px;
+    transition:background .15s,transform .12s;
+  }
+  :root[data-skin="cream"] .ctx-indicator:hover{
+    background:var(--surface-2,var(--surface-subtle,rgba(62,44,28,0.05)));
+  }
   /* Panel head buttons — bigger touch target, M3 hover surface */
   :root[data-skin="cream"] .panel-head-btn{
     width:32px;
