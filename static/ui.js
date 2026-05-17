@@ -6396,19 +6396,16 @@ function toolIcon(name){
   return icons[name]||li('wrench');
 }
 
-// personal: smart tool-output renderer for Phase 3.
+// personal: smart tool-output renderer for Phase 3 (v2 — github-style diff).
 // Recognizes content shape and renders accordingly:
-//   - unified diff (--- / +++ / @@ / +/- lines)        → red/green coloring
-//   - tool-args edits with old_string/new_string       → red/green coloring
+//   - unified diff (--- / +++ / @@ / +/- lines)        → github-style two-column gutter
+//   - tool-args edits with old_string/new_string       → same diff path
 //   - read_file content with `LINE_NUM|TEXT` format    → line numbers
 //   - everything else                                   → mono <pre> as before
 // All paths escape user-provided text; structural HTML is hand-built.
 function _isUnifiedDiffSnippet(text){
   const s=String(text||'');
   if(!s) return false;
-  // CommonMark-ish heuristic: look for a leading file-header line followed
-  // by hunk markers, OR for at least two +/- prefixed lines surrounded by
-  // diff scaffolding.  Avoid false positives on plain bullet lists.
   if(/^---\s+\S/m.test(s) && /^\+\+\+\s+\S/m.test(s)) return true;
   if(/^@@ -\d+/m.test(s)) return true;
   // Bare prefix-only diffs (our _cliPatchSnippetFromArgs output for patch+
@@ -6419,42 +6416,80 @@ function _isUnifiedDiffSnippet(text){
   return plusMinus>=2 && plusMinus*2>=lines.length;
 }
 function _isLineNumberedSnippet(text){
-  // read_file output format: 'LINE_NUM|CONTENT' per line, leading non-empty.
   const lines=String(text||'').split('\n').filter(l=>l.length>0);
   if(lines.length<2) return false;
   const numbered=lines.filter(l=>/^\s*\d+\|/.test(l)).length;
   return numbered>=2 && numbered*2>=lines.length;
 }
+// Parse @@ -A,B +C,D @@ hunk header → starting line numbers for old/new sides.
+function _parseHunkHeader(line){
+  const m=String(line||'').match(/^@@\s+-(\d+)(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/);
+  if(!m) return null;
+  return { oldStart: parseInt(m[1],10), newStart: parseInt(m[2],10) };
+}
 function _renderUnifiedDiffHtml(text){
-  // Hand-build colored diff lines; one <span> per line keeps copy-paste clean.
+  // GitHub-style two-column line-numbered diff.  Each row has:
+  //   [old-num] [new-num] [marker (+/-/space)] [content]
+  // Wrapped in a <table> so columns line up perfectly even with long
+  // unwrapped content; the table is inside an overflow-x:auto wrapper
+  // so mobile can horizontal-scroll instead of clipping text off-screen.
   const lines=String(text||'').split('\n');
-  const rows=lines.map(line=>{
-    if(!line.length) return '<span class="diff-line diff-blank"> </span>';
+  let oldNo=null, newNo=null;
+  const rows=[];
+  for(const line of lines){
+    if(line.startsWith('+++') || line.startsWith('---')){
+      rows.push(`<tr class="diff-row diff-header"><td colspan="3" class="diff-content">${esc(line)}</td></tr>`);
+      continue;
+    }
+    if(line.startsWith('@@')){
+      const h=_parseHunkHeader(line);
+      if(h){ oldNo=h.oldStart; newNo=h.newStart; }
+      rows.push(`<tr class="diff-row diff-hunk"><td colspan="3" class="diff-content">${esc(line)}</td></tr>`);
+      continue;
+    }
+    if(!line.length){
+      // Blank line as context (after a hunk header or between hunks).
+      const oldCell = oldNo!==null ? oldNo : '';
+      const newCell = newNo!==null ? newNo : '';
+      rows.push(`<tr class="diff-row diff-context"><td class="diff-num">${oldCell}</td><td class="diff-num">${newCell}</td><td class="diff-content"> </td></tr>`);
+      if(oldNo!==null) oldNo++;
+      if(newNo!==null) newNo++;
+      continue;
+    }
     const c=line.charAt(0);
-    if(line.startsWith('+++') || line.startsWith('---'))
-      return `<span class="diff-line diff-header">${esc(line)}</span>`;
-    if(line.startsWith('@@'))
-      return `<span class="diff-line diff-hunk">${esc(line)}</span>`;
-    if(c==='+')
-      return `<span class="diff-line diff-add">${esc(line)}</span>`;
-    if(c==='-')
-      return `<span class="diff-line diff-del">${esc(line)}</span>`;
-    return `<span class="diff-line diff-context">${esc(line)}</span>`;
-  });
-  return `<pre class="tool-diff">${rows.join('\n')}</pre>`;
+    const body=line.slice(1);
+    if(c==='+'){
+      const newCell = newNo!==null ? newNo : '';
+      rows.push(`<tr class="diff-row diff-add"><td class="diff-num"></td><td class="diff-num">${newCell}</td><td class="diff-content"><span class="diff-marker">+</span>${esc(body)}</td></tr>`);
+      if(newNo!==null) newNo++;
+    } else if(c==='-'){
+      const oldCell = oldNo!==null ? oldNo : '';
+      rows.push(`<tr class="diff-row diff-del"><td class="diff-num">${oldCell}</td><td class="diff-num"></td><td class="diff-content"><span class="diff-marker">-</span>${esc(body)}</td></tr>`);
+      if(oldNo!==null) oldNo++;
+    } else if(c===' '){
+      const oldCell = oldNo!==null ? oldNo : '';
+      const newCell = newNo!==null ? newNo : '';
+      rows.push(`<tr class="diff-row diff-context"><td class="diff-num">${oldCell}</td><td class="diff-num">${newCell}</td><td class="diff-content"><span class="diff-marker"> </span>${esc(body)}</td></tr>`);
+      if(oldNo!==null) oldNo++;
+      if(newNo!==null) newNo++;
+    } else {
+      // Line that doesn't match any known prefix — render as context, no
+      // line numbers (hunk header parser couldn't sync).
+      rows.push(`<tr class="diff-row diff-context"><td class="diff-num"></td><td class="diff-num"></td><td class="diff-content">${esc(line)}</td></tr>`);
+    }
+  }
+  return `<div class="tool-diff-wrap"><table class="tool-diff"><tbody>${rows.join('')}</tbody></table></div>`;
 }
 function _renderLineNumberedHtml(text){
   const lines=String(text||'').split('\n');
   const rows=lines.map(line=>{
     const m=line.match(/^(\s*)(\d+)\|(.*)$/);
-    if(!m) return `<span class="lined-line lined-cont">${esc(line)}</span>`;
-    return `<span class="lined-line"><span class="lined-num">${esc(m[2])}</span><span class="lined-text">${esc(m[3])}</span></span>`;
+    if(!m) return `<tr class="lined-row"><td class="lined-num"></td><td class="lined-text lined-cont">${esc(line)}</td></tr>`;
+    return `<tr class="lined-row"><td class="lined-num">${esc(m[2])}</td><td class="lined-text">${esc(m[3])}</td></tr>`;
   });
-  return `<pre class="tool-lined">${rows.join('\n')}</pre>`;
+  return `<div class="tool-lined-wrap"><table class="tool-lined"><tbody>${rows.join('')}</tbody></table></div>`;
 }
 function _renderToolDetailContent(snippet, tc){
-  // Decide which renderer to use.  Order matters: diff before lined because
-  // a colorized diff usually wins over a numeric heuristic.
   if(_isUnifiedDiffSnippet(snippet) || (tc && tc.is_diff)){
     return _renderUnifiedDiffHtml(snippet);
   }
