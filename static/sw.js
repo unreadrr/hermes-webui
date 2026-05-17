@@ -22,8 +22,9 @@
 //  tool-running shimmer + code block softening +
 //  queue pill rounded + thinking card softer corners +
 //  markdown typography polish +
-//  inject-pill DOM-only (preserve live tool cards mid-stream)) — bump.
-const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-inject-pill';
+//  inject-pill DOM-only (preserve live tool cards mid-stream) +
+//  composer footer chips unified) — bump.
+const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-composer-chips';
 
 // Static assets that form the app shell.
 //

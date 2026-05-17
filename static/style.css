@@ -347,6 +347,38 @@
     padding:10px 14px 0;
     gap:6px;
   }
+  /* Composer footer chips — unify model/effort/ws-chip/profile under
+   * one M3 chip language (matching the topbar pattern).  Drop the
+   * composer-divider line — chips are self-separating in pill form. */
+  :root[data-skin="cream"] .composer-divider{display:none;}
+  :root[data-skin="cream"] .composer-profile-chip,
+  :root[data-skin="cream"] .composer-footer .ws-chip,
+  :root[data-skin="cream"] .composer-footer .chip{
+    border-radius:999px;
+    padding:5px 12px;
+    font-size:12px;
+    font-weight:500;
+    background:var(--surface-2,var(--surface-subtle,rgba(62,44,28,0.05)));
+    border:1px solid var(--border);
+    transition:background .15s,border-color .15s,transform .12s;
+  }
+  :root[data-skin="cream"] .composer-profile-chip:hover,
+  :root[data-skin="cream"] .composer-footer .ws-chip:hover,
+  :root[data-skin="cream"] .composer-footer .chip:hover{
+    background:var(--accent-bg);
+    border-color:var(--accent-bg-strong);
+    transform:translateY(-1px);
+  }
+  :root[data-skin="cream"] .composer-profile-chip:active,
+  :root[data-skin="cream"] .composer-footer .ws-chip:active,
+  :root[data-skin="cream"] .composer-footer .chip:active{
+    transform:scale(.97);
+    transition-duration:.06s;
+  }
+  /* Assistant H avatar gap — give breathing room between avatar and bubble */
+  :root[data-skin="cream"] .msg-row[data-role="assistant"] .msg-role{
+    gap:10px;
+  }
   /* Queue pill — when there are queued mid-stream messages, show as
    * a rounded M3 pill instead of the legacy hard-cornered top-attached
    * tab.  Matches the rest of the cream chip language. */
