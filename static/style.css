@@ -585,6 +585,29 @@
   :root[data-skin="cream"] .msg-row + .msg-row{
     margin-top:18px;
   }
+  /* Subtle surface container for assistant turns — adds the M3
+   * card-on-canvas visual hierarchy that vision flagged as missing.
+   * Keeps user bubbles on the canvas (they have their own bubble bg). */
+  :root[data-skin="cream"] .msg-row[data-role="assistant"]{
+    padding:14px 16px;
+    border-radius:18px;
+    background:var(--surface-subtle,rgba(62,44,28,0.025));
+    border:1px solid var(--border-subtle,var(--border));
+    transition:border-color .15s,background-color .15s;
+  }
+  :root.dark[data-skin="cream"] .msg-row[data-role="assistant"]{
+    background:rgba(255,248,238,0.025);
+    border-color:rgba(255,248,238,0.05);
+  }
+  :root[data-skin="cream"] .msg-row[data-role="assistant"]:hover{
+    border-color:var(--border);
+  }
+  /* Code blocks inside assistant turns lose their double-border so the
+   * code container reads as nested-on-surface, not floating on noise. */
+  :root[data-skin="cream"] .msg-row[data-role="assistant"] .msg-body pre{
+    background:var(--code-bg);
+    border-color:var(--border);
+  }
   /* Queue pill — when there are queued mid-stream messages, show as
    * a rounded M3 pill instead of the legacy hard-cornered top-attached
    * tab.  Matches the rest of the cream chip language. */
