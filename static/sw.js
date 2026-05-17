@@ -33,8 +33,9 @@
 //  M3 send-FAB 40x40 with proper elevation +
 //  M3 nav rail with filled active pill +
 //  M3 structural chat rewrite (bubble corners, avatar grid, tool header) +
-//  M3 assistant turn surface container) — bump.
-const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-m3-rewrite-2';
+//  M3 assistant turn surface container +
+//  M3 typography scale (h1/h2/h3, lists, blockquote)) — bump.
+const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-m3-rewrite-3';
 
 // Static assets that form the app shell.
 //
