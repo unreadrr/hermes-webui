@@ -27,8 +27,9 @@
 //  drop "Вы" badge on inject-pill +
 //  inject/steer pills accumulate (don't replace prior) +
 //  freeze live turn before pill (correct chronological order) +
-//  M3 sidebar search pill) — bump.
-const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-search-pill';
+//  M3 sidebar search pill +
+//  M3 date group headers) — bump.
+const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-date-headers';
 
 // Static assets that form the app shell.
 //
