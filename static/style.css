@@ -1098,97 +1098,77 @@
     color:rgba(244,229,207,0.85);
   }
   /* ──────────────────────────────────────────────────────────
-   * COMPOSER PILL REWRITE v2 — true horizontal pill via display:contents.
-   *
-   * The DOM is:
-   *   .composer-box
-   *     textarea#msg
-   *     .composer-footer
-   *       .composer-left  (attach, mic, voice, divider, yolo, profile)
-   *       .composer-right (status, ctx, bg-badge, send)
-   *
-   * To match the mockup we want a TWO-row layout in composer-box:
-   *   row 1 (chip track): yolo, profile, model, effort etc — quiet pill
-   *   row 2 (input pill): attach + textarea + mic + send — single line
-   *
-   * Trick: display:contents on footer/left/right flattens their children
-   * into composer-box's flex layout.  Then we use grid-template-areas
-   * with named children for the row split, and order numbers as fallback
-   * for items we don't explicitly assign.
+   * COMPOSER PILL REWRITE v3 — single horizontal row.
+   * cream-m3.js physically moves chips (yolo/profile/model/effort/ctx)
+   * out of composer-box into #creamM3Topbar above the messages.
+   * So composer-box becomes a clean single-row pill: 📎 textarea 🎤 send.
    * ────────────────────────────────────────────────────────── */
   :root[data-skin="cream"] .composer-box{
     display:flex;
     flex-direction:row;
-    flex-wrap:wrap;
     align-items:center;
     border-radius:28px;
-    padding:8px 8px 8px 12px;
-    gap:6px 8px;
+    padding:6px 8px 6px 12px;
+    gap:4px;
     background:var(--input-bg,var(--bg));
     border:1px solid var(--border);
     transition:border-color .2s,box-shadow .2s;
+    flex-wrap:nowrap;
   }
   :root[data-skin="cream"] .composer-box .composer-footer,
   :root[data-skin="cream"] .composer-box .composer-left,
   :root[data-skin="cream"] .composer-box .composer-right{
     display:contents;
   }
-  /* Row 1: chips track — wrap to its own line via flex-basis:100% on
-   * a sibling break before each chip group. Use a ::before on the
-   * textarea to act as the break point. */
   :root[data-skin="cream"] .composer-box textarea#msg{
     order:10;
-    flex:1 1 100%;
+    flex:1 1 auto;
     background:transparent;
     border:0;
-    padding:6px 10px;
+    padding:8px 8px;
     font-size:15px;
     line-height:1.5;
     min-height:24px;
     max-height:160px;
+    min-width:0;
   }
-  /* Order assignments — chips above (1-9), textarea (10), input-row icons (11-19) */
-  :root[data-skin="cream"] .composer-box #yoloPill{order:1;}
-  :root[data-skin="cream"] .composer-box #profileChipWrap{order:2;}
-  :root[data-skin="cream"] .composer-box .composer-toolsets-pill{order:3;}
-  :root[data-skin="cream"] .composer-box .composer-mobile-config-panel{order:4;}
   :root[data-skin="cream"] .composer-box .composer-divider{display:none;}
-  /* Input row icons (after textarea) */
-  :root[data-skin="cream"] .composer-box #btnAttach{order:11;flex-basis:auto;}
-  :root[data-skin="cream"] .composer-box #fileInput{order:11;display:none;}
-  :root[data-skin="cream"] .composer-box #btnMic{order:12;}
-  :root[data-skin="cream"] .composer-box #btnVoiceMode{order:13;}
-  :root[data-skin="cream"] .composer-box .composer-status{order:14;flex:1;text-align:right;}
-  :root[data-skin="cream"] .composer-box #ctxIndicatorWrap{order:15;}
-  :root[data-skin="cream"] .composer-box #bgBadge{order:16;}
+  /* Order: attach (1) | textarea (10) | mic/voice (11-12) | send (20) */
+  :root[data-skin="cream"] .composer-box #btnAttach{order:1;}
+  :root[data-skin="cream"] .composer-box #fileInput{display:none;}
+  :root[data-skin="cream"] .composer-box #btnMic{order:11;}
+  :root[data-skin="cream"] .composer-box #btnVoiceMode{order:12;}
+  :root[data-skin="cream"] .composer-box .composer-status{order:13;font-size:11px;opacity:.6;}
   :root[data-skin="cream"] .composer-box #btnSend,
   :root[data-skin="cream"] .composer-box .send-btn,
   :root[data-skin="cream"] .composer-box .cancel-btn{order:20;}
-  /* Hairline divider between chip track and input row inside the pill */
-  :root[data-skin="cream"] .composer-box::before{
-    content:'';
-    order:9;
-    flex:1 1 100%;
-    height:1px;
-    margin:2px -2px 4px;
-    background:var(--border-subtle,var(--border));
-    opacity:.6;
-  }
-  /* Quiet the chip track items so they read as secondary track */
-  :root[data-skin="cream"] .composer-box #yoloPill,
-  :root[data-skin="cream"] .composer-box #profileChipWrap,
-  :root[data-skin="cream"] .composer-box .composer-toolsets-pill{
-    font-size:11px;
-  }
-  /* Make textarea flex-basis:100% force the chips to wrap above it
-   * (since flex-wrap is enabled on composer-box) */
-  /* Composer focus halo on the whole pill */
+  /* Composer focus halo */
   :root[data-skin="cream"] .composer-box:focus-within{
     border-color:var(--accent);
     box-shadow:0 0 0 3px var(--focus-glow,var(--accent-bg)),0 4px 16px rgba(62,44,28,.10);
   }
   :root.dark[data-skin="cream"] .composer-box:focus-within{
     box-shadow:0 0 0 3px var(--focus-glow,var(--accent-bg)),0 4px 16px rgba(0,0,0,.5);
+  }
+  /* ──────────────────────────────────────────────────────────
+   * #creamM3Topbar — chip rail above messages.
+   * Populated by cream-m3.js with relocated chips.
+   * ────────────────────────────────────────────────────────── */
+  :root[data-skin="cream"] #creamM3Topbar{
+    display:flex;
+    align-items:center;
+    flex-wrap:wrap;
+    gap:6px;
+    padding:10px 24px 12px;
+    border-bottom:1px solid var(--border-subtle,var(--border));
+    background:var(--bg);
+    flex-shrink:0;
+  }
+  :root[data-skin="cream"] #creamM3Topbar:empty{
+    display:none;
+  }
+  :root[data-skin="cream"] #creamM3Topbar .cream-m3-relocated{
+    /* Items keep their original styling; topbar is just a host */
   }
   /* Chat content max-width — match mockup's 760px centered column.
    * Default --msg-max is 780, slightly bumped to give bubbles breathing room. */
