@@ -881,9 +881,9 @@ async function cmdSteer(args){
 function _showSteerIndicator(text){
   const inner=document.getElementById('msgInner');
   if(!inner) return;
-  // Remove any existing steer indicator
-  const old=inner.querySelector('.steer-indicator');
-  if(old) old.remove();
+  // personal: APPEND, don't replace.  Multiple steers in one turn
+  // should each leave their own indicator so the operator sees the
+  // history of what they tried to nudge with.
   const el=document.createElement('div');
   el.className='steer-indicator';
   const badge=document.createElement('span');
@@ -901,9 +901,11 @@ function _showSteerIndicator(text){
 function _showInjectIndicator(text){
   const inner=document.getElementById('msgInner');
   if(!inner) return;
-  // Remove any existing inject indicator (one per turn)
-  const old=inner.querySelector('.inject-indicator');
-  if(old) old.remove();
+  // personal: APPEND, don't replace.  Each mid-stream send leaves its
+  // own pill so the operator can see they sent multiple messages.
+  // The backend journals every inject; on 'done' the full history
+  // syncs into S.messages and the transient pills get replaced by
+  // proper user bubbles.
   const el=document.createElement('div');
   el.className='inject-indicator';
   const body=document.createElement('span');

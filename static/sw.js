@@ -24,8 +24,9 @@
 //  markdown typography polish +
 //  inject-pill DOM-only (preserve live tool cards mid-stream) +
 //  composer footer chips unified +
-//  drop "Вы" badge on inject-pill) — bump.
-const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-no-vy-badge';
+//  drop "Вы" badge on inject-pill +
+//  inject/steer pills accumulate (don't replace prior)) — bump.
+const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-pill-history';
 
 // Static assets that form the app shell.
 //
