@@ -1051,6 +1051,52 @@
   :root[data-skin="cream"] .ctx-indicator:hover{
     background:var(--surface-2,var(--surface-subtle,rgba(62,44,28,0.05)));
   }
+  /* Prism syntax highlighting — warm mocha palette matching cream skin */
+  :root[data-skin="cream"] .token.comment,
+  :root[data-skin="cream"] .token.prolog,
+  :root[data-skin="cream"] .token.doctype,
+  :root[data-skin="cream"] .token.cdata{
+    color:rgba(196,171,135,0.65);
+    font-style:italic;
+  }
+  :root[data-skin="cream"] .token.punctuation{
+    color:rgba(196,171,135,0.85);
+  }
+  :root[data-skin="cream"] .token.string,
+  :root[data-skin="cream"] .token.attr-value,
+  :root[data-skin="cream"] .token.regex{
+    color:#B5D69B;
+  }
+  :root[data-skin="cream"] .token.keyword,
+  :root[data-skin="cream"] .token.atrule,
+  :root[data-skin="cream"] .token.builtin{
+    color:#E5C089;
+    font-weight:500;
+  }
+  :root[data-skin="cream"] .token.function,
+  :root[data-skin="cream"] .token.class-name{
+    color:#FFB4AB;
+  }
+  :root[data-skin="cream"] .token.number,
+  :root[data-skin="cream"] .token.boolean,
+  :root[data-skin="cream"] .token.constant{
+    color:#C49A6C;
+  }
+  :root[data-skin="cream"] .token.property,
+  :root[data-skin="cream"] .token.tag,
+  :root[data-skin="cream"] .token.symbol{
+    color:#E5C089;
+  }
+  :root[data-skin="cream"] .token.attr-name,
+  :root[data-skin="cream"] .token.selector,
+  :root[data-skin="cream"] .token.variable{
+    color:#F4E5CF;
+  }
+  :root[data-skin="cream"] .token.operator,
+  :root[data-skin="cream"] .token.entity,
+  :root[data-skin="cream"] .token.url{
+    color:rgba(244,229,207,0.85);
+  }
   /* Panel head buttons — bigger touch target, M3 hover surface */
   :root[data-skin="cream"] .panel-head-btn{
     width:32px;
