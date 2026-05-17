@@ -490,6 +490,101 @@
     background:var(--accent);
     color:var(--bg);
   }
+  /* ──────────────────────────────────────────────────────────
+   * personal-m3-rewrite: structural chat-zone overrides.
+   * CSS-only — DOM untouched.  Targets msg-row / msg-body /
+   * msg-role / role-icon / tool-card.  Cream-skin scoped.
+   * ────────────────────────────────────────────────────────── */
+  /* User row — flex column with right-aligned bubble */
+  :root[data-skin="cream"] .msg-row[data-role="user"]{
+    display:flex;
+    flex-direction:column;
+    align-items:flex-end;
+  }
+  :root[data-skin="cream"] .msg-row[data-role="user"] .msg-body{
+    background:var(--user-bubble-bg,var(--accent-bg));
+    color:var(--user-bubble-text,var(--accent-text));
+    padding:12px 16px;
+    border-radius:20px 20px 6px 20px;
+    border:1px solid var(--user-bubble-border,var(--accent-bg-strong));
+    max-width:min(78%,640px);
+    box-shadow:0 1px 2px rgba(62,44,28,0.06);
+    word-wrap:break-word;
+    overflow-wrap:anywhere;
+  }
+  :root.dark[data-skin="cream"] .msg-row[data-role="user"] .msg-body{
+    box-shadow:0 1px 2px rgba(0,0,0,0.30);
+  }
+  :root[data-skin="cream"] .msg-row[data-role="user"] .msg-foot{
+    align-self:flex-end;
+    padding-right:6px;
+    margin-top:4px;
+  }
+  /* Assistant turn — avatar-grid layout matching the mockup */
+  :root[data-skin="cream"] .msg-row[data-role="assistant"]{
+    display:grid;
+    grid-template-columns:32px 1fr;
+    column-gap:12px;
+    align-items:flex-start;
+  }
+  :root[data-skin="cream"] .msg-row[data-role="assistant"] .msg-role{
+    grid-column:1 / -1;
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-bottom:6px;
+  }
+  :root[data-skin="cream"] .msg-row[data-role="assistant"] > *:not(.msg-role){
+    grid-column:2 / -1;
+    min-width:0;
+  }
+  :root[data-skin="cream"] .msg-row[data-role="assistant"] .msg-role .role-icon{
+    width:30px;height:30px;
+    border-radius:10px;
+    font-size:13px;
+    font-weight:700;
+    background:var(--accent);
+    color:var(--bg);
+    border:0;
+    box-shadow:0 1px 2px rgba(62,44,28,0.18);
+    flex-shrink:0;
+  }
+  :root.dark[data-skin="cream"] .msg-row[data-role="assistant"] .msg-role .role-icon{
+    box-shadow:0 1px 2px rgba(0,0,0,0.40);
+  }
+  /* Tool card header — proper M3 row with icon chip + name + preview */
+  :root[data-skin="cream"] .tool-card-header{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:10px 14px;
+    cursor:pointer;
+    user-select:none;
+    min-width:0;
+  }
+  :root[data-skin="cream"] .tool-card-icon svg{
+    width:16px;height:16px;
+  }
+  :root[data-skin="cream"] .tool-card-name{
+    font-size:13px;
+    font-weight:600;
+    color:var(--text);
+    flex-shrink:0;
+  }
+  :root[data-skin="cream"] .tool-card-preview{
+    font-family:"JetBrains Mono","SF Mono",ui-monospace,monospace;
+    font-size:12px;
+    color:var(--muted);
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    flex:1;
+    min-width:0;
+  }
+  /* Breathing room between turns */
+  :root[data-skin="cream"] .msg-row + .msg-row{
+    margin-top:18px;
+  }
   /* Queue pill — when there are queued mid-stream messages, show as
    * a rounded M3 pill instead of the legacy hard-cornered top-attached
    * tab.  Matches the rest of the cream chip language. */
