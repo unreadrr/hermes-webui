@@ -14,8 +14,9 @@
 //  cream skin + micro-animations + composer focus-glow + dot-wave +
 //  message slide-in + cream-specific diff colors + send-btn transitions +
 //  topbar chip hover/press + activity-group expand + scroll-bottom polish +
-//  steer fallback + silent reconnect + Inter font + warmer dark cream) — bump.
-const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-cream-warm';
+//  steer fallback + silent reconnect + Inter font + warmer dark cream +
+//  M3 cream pill composer + asymmetric user bubble) — bump.
+const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-cream-m3';
 
 // Static assets that form the app shell.
 //
