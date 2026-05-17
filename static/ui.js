@@ -5777,6 +5777,14 @@ function renderMessages(options){
 
   function _insertCompressionLikeNode(node, anchorIndex, fallbackPosition){
     if(!node) return;
+    // personal: when caller passes fallbackPosition='skip' AND no explicit
+    // anchor, that means the proper rawIdx-based anchor wasn't resolvable
+    // (e.g. referenceMessageRawIdx<0 because the anchor message lives
+    // outside the loaded message array — a stale sessionCompressionAnchor
+    // pointing past the current store).  Any anchor we'd pick now via the
+    // implicit insertionAnchor would be wrong and would dump the banner
+    // at the bottom of the last assistant-turn.  Skip immediately instead.
+    if(anchorIndex===undefined && fallbackPosition==='skip') return;
     const anchorIdx=anchorIndex===undefined?insertionAnchor:anchorIndex;
     if(anchorIdx!==null && renderVisWithIdx[anchorIdx]){
       const anchorRawIdx=renderVisWithIdx[anchorIdx].rawIdx;
@@ -5849,7 +5857,14 @@ function renderMessages(options){
       userRow.parentElement.insertBefore(node, userRow);
       return;
     }
-    inner.appendChild(node);
+    // personal: anchor's rawIdx maps to a render slot whose DOM hasn't
+    // been built yet (anchor message is in an unloaded window above the
+    // currently-rendered tail).  Skip silently — same reason as the
+    // empty-window and past-tail branches above.  Falling through to
+    // inner.appendChild here would drop the banner at the bottom and
+    // falsely imply a fresh compression event after the last assistant
+    // turn (this is what was happening for paginated-tail views).
+    return;
   }
   const preservedOnlyNode=(!preservedCompressionTaskCardsAttached&&(!referenceMessage||compressionState)&&preservedCompressionTaskMessages.length)
     ? (()=>{const row=document.createElement('div');row.innerHTML=`<div class="compression-turn"><div class="compression-turn-blocks">${_preservedCompressionTaskListCardsHtml(preservedCompressionTaskMessages)}</div></div>`;return row.firstElementChild;})()
@@ -5860,13 +5875,18 @@ function renderMessages(options){
   const handoffSummaryStates=_collectHandoffSummaryStates(S.messages);
 
   _insertCompressionLikeNode(compressionNode);
-  // personal: skip protection for the rawIdx case lives inside
-  // _insertCompressionLikeNodeByRawIdx (returns silently when anchor is
-  // outside the loaded render window).  For the no-rawIdx fallback we
-  // keep upstream behavior (inner.appendChild) so the call site matches
-  // upstream verbatim — see test_reference_message_uses_raw_transcript_position.
+  // personal: skip protection lives in two places
+  //  - inside _insertCompressionLikeNodeByRawIdx for the rawIdx path
+  //    (returns silently when anchor is outside the loaded render window)
+  //  - via the 'skip' arg here for the no-rawIdx fallback so the banner
+  //    doesn't get dropped at the bottom and falsely imply a fresh
+  //    compression event after the last assistant turn.
+  // Test test_reference_message_uses_raw_transcript_position_before_anchor_fallback
+  // still expects the literal upstream call signature, so it now fails as a
+  // known personal-only issue — same pattern as
+  // test_named_custom_missing_dropdown_model_does_not_persist_fallback.
   if(referenceNode&&referenceMessageRawIdx>=0) _insertCompressionLikeNodeByRawIdx(referenceNode, referenceMessageRawIdx);
-  else _insertCompressionLikeNode(referenceNode);
+  else _insertCompressionLikeNode(referenceNode, undefined, 'skip');
   _insertCompressionLikeNode(preservedOnlyNode, preservedOnlyAnchor);
   _insertCompressionLikeNode(handoffState?_handoffCardsNode(handoffState):null, renderVisWithIdx.length?renderVisWithIdx.length-1:null);
   for(const entry of handoffSummaryStates){
