@@ -274,6 +274,40 @@
     font-size:13px;
     font-weight:600;
   }
+  /* M3 surface hierarchy — three tones to give the layout depth.
+   * --bg (lowest, chat canvas) → --surface (sidebar) → composer raised.
+   * Without this everything sits on a single tone and looks flat. */
+  :root[data-skin="cream"] .sidebar{background:var(--surface);}
+  :root[data-skin="cream"] .topbar{
+    background:var(--bg);
+    border-bottom:1px solid var(--border);
+  }
+  /* M3 topbar chips — context, model, effort all use the same chip language. */
+  :root[data-skin="cream"] .topbar .chip,
+  :root[data-skin="cream"] .topbar .ws-chip{
+    border-radius:999px;
+    padding:5px 12px;
+    font-size:12px;
+    font-weight:500;
+    background:var(--surface-2,var(--surface-subtle,rgba(62,44,28,0.06)));
+    border:1px solid var(--border);
+    transition:background .15s,border-color .15s,transform .12s;
+  }
+  :root[data-skin="cream"] .topbar .chip:hover,
+  :root[data-skin="cream"] .topbar .ws-chip:hover{
+    background:var(--accent-bg);
+    border-color:var(--accent-bg-strong);
+    transform:translateY(-1px);
+  }
+  /* Tool card icon refinement — small chip with secondary-container fill. */
+  :root[data-skin="cream"] .tool-card-icon{
+    width:28px;height:28px;
+    border-radius:8px;
+    background:var(--accent-bg);
+    color:var(--accent-text);
+    display:flex;align-items:center;justify-content:center;
+    flex-shrink:0;
+  }
   :root[data-skin="cream"] .composer-box{border-radius:28px;padding:6px;}
   :root[data-skin="cream"] textarea#msg{padding:10px 14px 6px;}
   :root[data-skin="cream"] .composer-box:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--focus-glow),0 4px 16px rgba(62,44,28,0.10);}

@@ -17,8 +17,9 @@
 //  steer fallback + silent reconnect + Inter font + warmer dark cream +
 //  M3 cream pill composer + asymmetric user bubble +
 //  message actions visible + activity pill restyle +
-//  M3 sidebar tonal active + rounded-square assistant avatar) — bump.
-const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-cream-m3-sidebar';
+//  M3 sidebar tonal active + rounded-square assistant avatar +
+//  M3 topbar chips + surface hierarchy) — bump.
+const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-cream-m3-surfaces';
 
 // Static assets that form the app shell.
 //
