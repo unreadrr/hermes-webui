@@ -1004,6 +1004,39 @@ def _clear_stale_stream_state(session) -> bool:
     with _get_session_agent_lock(session.session_id):
         if getattr(session, "active_stream_id", None) != stream_id:
             return False
+        if getattr(session, "pending_user_message", None):
+            try:
+                from api.models import _apply_core_sync_or_error_marker, _get_profile_home
+                profile_home = _get_profile_home(getattr(session, "profile", None))
+                core_path = profile_home / "sessions" / f"session_{session.session_id}.json"
+                repaired = _apply_core_sync_or_error_marker(
+                    session,
+                    core_path,
+                    stream_id_for_recheck=stream_id,
+                    touch_updated_at=False,
+                )
+            except Exception:
+                logger.exception(
+                    "_clear_stale_stream_state: failed to repair stale pending stream %s "
+                    "for session %s",
+                    stream_id, getattr(session, "session_id", "?"),
+                )
+                repaired = False
+            if repaired:
+                if original_stub is not session:
+                    try:
+                        original_stub.active_stream_id = None
+                        if hasattr(original_stub, "pending_user_message"):
+                            original_stub.pending_user_message = None
+                        if hasattr(original_stub, "pending_attachments"):
+                            original_stub.pending_attachments = []
+                        if hasattr(original_stub, "pending_started_at"):
+                            original_stub.pending_started_at = None
+                    except Exception:
+                        pass
+                return True
+            if getattr(session, "active_stream_id", None) != stream_id:
+                return False
         _materialize_pending_user_turn_before_error(session)
         session.active_stream_id = None
         if hasattr(session, "pending_user_message"):
@@ -2111,7 +2144,7 @@ from api.run_journal import (
     read_run_events,
     stale_interrupted_event,
 )
-from api.providers import get_providers, get_provider_quota, set_provider_key, remove_provider_key
+from api.providers import get_providers, get_provider_quota, get_provider_cost_history, set_provider_key, remove_provider_key
 from api.onboarding import (
     apply_onboarding_setup,
     get_onboarding_status,
@@ -3400,6 +3433,16 @@ def handle_get(handler, parsed) -> bool:
         provider_id = (query.get("provider", [""])[0] or None)
         refresh = (query.get("refresh", [""])[0] or "").strip().lower() in {"1", "true", "yes", "on"}
         return j(handler, get_provider_quota(provider_id, refresh=refresh))
+
+    if parsed.path == "/api/provider/cost-history":
+        query = parse_qs(parsed.query)
+        provider_id = (query.get("provider", [""])[0] or None)
+        days_raw = (query.get("days", ["7"])[0] or "7").strip()
+        try:
+            days = max(1, min(int(days_raw), 365))
+        except (ValueError, TypeError):
+            days = 7
+        return j(handler, get_provider_cost_history(provider_id, days))
 
     if parsed.path == "/api/settings":
         settings = load_settings()
@@ -6438,8 +6481,32 @@ def _handle_media(handler, parsed):
             or html_inline_ok
         )
     ) else "attachment"
+    # _serve_file_bytes sends Content-Security-Policy when csp is set.
     csp = "sandbox allow-scripts" if html_inline_ok else None
     return _serve_file_bytes(handler, target, mime, disposition, "private, max-age=3600", csp=csp)
+
+
+def _file_raw_target(session, sid: str, rel: str) -> Path | None:
+    """Resolve /api/file/raw paths from the workspace or this session's uploads."""
+    try:
+        target = safe_resolve(Path(session.workspace), rel)
+    except ValueError:
+        target = None
+    if target and target.exists() and target.is_file():
+        return target
+
+    # Chat uploads now live in a per-session attachment inbox outside the
+    # workspace. Keep the public URL stable while scoping fallback lookup to
+    # the requesting session's own attachment directory.
+    try:
+        from api.upload import _session_attachment_dir
+
+        attachment_target = safe_resolve(_session_attachment_dir(sid), rel)
+    except Exception:
+        return None
+    if attachment_target.exists() and attachment_target.is_file():
+        return attachment_target
+    return None
 
 
 def _handle_file_raw(handler, parsed):
@@ -6453,8 +6520,8 @@ def _handle_file_raw(handler, parsed):
         return bad(handler, "Session not found", 404)
     rel = qs.get("path", [""])[0]
     force_download = qs.get("download", [""])[0] == "1"
-    target = safe_resolve(Path(s.workspace), rel)
-    if not target.exists() or not target.is_file():
+    target = _file_raw_target(s, sid, rel)
+    if target is None:
         return j(handler, {"error": "not found"}, status=404)
     ext = target.suffix.lower()
     mime = MIME_MAP.get(ext, "application/octet-stream")
@@ -7775,16 +7842,56 @@ def _handle_chat_start(handler, body, diag=None):
             requested_model,
             requested_provider,
         )
-        response = _start_chat_stream_for_session(
-            s,
-            msg=msg,
-            attachments=attachments,
-            workspace=workspace,
-            model=model,
-            model_provider=model_provider,
-            normalized_model=normalized_model,
-            diag=diag,
+        from api.runtime_adapter import (
+            LegacyJournalRuntimeAdapter,
+            StartRunRequest,
+            runtime_adapter_enabled,
         )
+
+        if runtime_adapter_enabled():
+            def _legacy_start_run(request: StartRunRequest) -> dict:
+                return _start_chat_stream_for_session(
+                    s,
+                    msg=request.message,
+                    attachments=request.attachments,
+                    workspace=request.workspace or workspace,
+                    model=request.model or model,
+                    model_provider=request.provider or model_provider,
+                    normalized_model=normalized_model,
+                    diag=diag,
+                )
+
+            adapter = LegacyJournalRuntimeAdapter(start_run_delegate=_legacy_start_run)
+            result = adapter.start_run(
+                StartRunRequest(
+                    session_id=s.session_id,
+                    message=msg,
+                    attachments=attachments,
+                    workspace=workspace,
+                    profile=getattr(s, "profile", None),
+                    provider=model_provider,
+                    model=model,
+                    source="webui",
+                    metadata={"route": "/api/chat/start"},
+                )
+            )
+            response = dict(result.payload)
+            response.setdefault("stream_id", result.stream_id)
+            response.setdefault("session_id", result.session_id)
+            response.setdefault("run_id", result.run_id)
+            response.setdefault("status", result.status)
+            response.setdefault("active_controls", result.active_controls)
+        else:
+            response = _start_chat_stream_for_session(
+                s,
+                msg=msg,
+                attachments=attachments,
+                workspace=workspace,
+                model=model,
+                model_provider=model_provider,
+                normalized_model=normalized_model,
+                diag=diag,
+            )
         status = int(response.pop("_status", 200) or 200)
         diag.stage("response_write") if diag else None
         return j(handler, response, status=status)
@@ -7924,7 +8031,7 @@ def _handle_chat_sync(handler, body):
                 _merge_display_messages_after_agent_result,
                 _restore_reasoning_metadata,
                 _sanitize_messages_for_api,
-                _session_context_messages,
+                _context_messages_for_new_turn,
                 _workspace_context_prefix,
             )
             workspace_ctx = _workspace_context_prefix(str(s.workspace))
@@ -7941,12 +8048,12 @@ def _handle_chat_sync(handler, body):
             )
 
             _previous_messages = list(s.messages or [])
-            _previous_context_messages = list(_session_context_messages(s))
+            _previous_context_messages = list(_context_messages_for_new_turn(s, msg))
 
             result = agent.run_conversation(
                 user_message=workspace_ctx + msg,
                 system_message=workspace_system_msg,
-                conversation_history=_sanitize_messages_for_api(_previous_context_messages),
+                conversation_history=_sanitize_messages_for_api(_previous_context_messages, cfg=get_config()),
                 task_id=s.session_id,
                 persist_user_message=msg,
             )

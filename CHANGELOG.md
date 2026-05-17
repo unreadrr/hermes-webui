@@ -2,6 +2,136 @@
 
 ## [Unreleased]
 
+## [v0.51.82] — 2026-05-17 — Release BF (stage-375 — 2-PR batch — table renderer pipe protection + Catppuccin appearance skin)
+
+### Added
+
+- **PR #2432** by @Michaelyklam (closes #2426) — Add a Catppuccin skin to Appearance settings. The single opt-in skin maps light mode to Catppuccin Latte and dark mode to Catppuccin Mocha, using Mauve as the accent while preserving the existing theme/skin persistence and no-build-step architecture.
+
+### Fixed
+
+- **PR #2428** by @bengdan — Protect pipes inside parens / brackets / braces from naive `split('|')` in the Markdown table renderer. Cells like `` `(a|b)` ``, `` `Union[int|float]` ``, `` `(a|b|c)` ``, and `` `Union[int|float|str]` `` now stay in a single column instead of mis-splitting. The fix uses an iterative `_protectPipes` loop so all pipes inside one bracket pair are caught, not just the first. Also adds a `$...$` guard so a KaTeX inline-math span straddling ` | ` column separators is left alone instead of being stashed as math. Stage-fix on the contributor branch (a) swapped the literal `}` glyphs in the regex character classes for `\x7d` hex escapes (semantically identical, but the JS source no longer carries bare close-brace glyphs that confused the brace-counting `extractFunc` in `tests/test_renderer_js_behaviour.py`); (b) dropped a stray apostrophe stop that would have mis-split `('a'|'b')`-style string-literal unions; (c) dropped angle brackets `<` / `>` from the protected-bracket set, after Opus advisor flagged that `| x < 5 | y > 10 |` would otherwise collapse into a single cell (comparison-operator usage dominates content-grouping usage in real LLM table output); and (d) added `tests/test_issue2428_table_pipe_protection.py` with 12 regression cases covering single-pipe, multi-pipe-in-brackets, apostrophes-with-pipes, the KaTeX-in-table guard, and the angle-bracket comparison-operator case.
+
+## [v0.51.81] — 2026-05-17 — Release BE (stage-374 — 6-PR batch — cost-history POSIX lock + prompt-cache tokens + Plugins panel i18n + pending-placeholder chat + journal-replay partial recovery + default-off RuntimeAdapter Slice 2 seam)
+
+### Added
+
+- **PR #2424** by @Michaelyklam (refs #1925) — Add the default-off `RuntimeAdapter` Slice 2 seam. `HERMES_WEBUI_RUNTIME_ADAPTER=legacy-journal` now routes chat start through a `LegacyJournalRuntimeAdapter` facade over the existing legacy streaming path, while the default remains `legacy-direct`. The new adapter interface/payload classes expose start/observe/status/cancel/approval/clarify methods and delegate controls to existing handlers without introducing a runner, sidecar, new process-local queues, cached agents, cancellation registries, or callback registries.
+- **PR #2421** by @Michaelyklam (fixes #2419) — Surface provider prompt-cache read/write tokens in WebUI usage displays. Cache-miss cost issues are now visible in the context tooltip and per-turn usage footer; counters carry through session persistence, SSE usage payloads, and live snapshots so deltas remain accurate across the active turn.
+- **PR #2425** by @mccxj — Wire Settings → Plugins panel into the existing i18n system. Panel title, description, empty state, and per-plugin labels (hooks, enabled/disabled, load failures) now respect the user's language preference; 10 new keys ship in English with `TODO: translate` placeholders in 9 additional locales.
+
+### Fixed
+
+- **PR #2418** by @Michaelyklam (fixes #2402) — OpenRouter cost-history snapshot updates now take a provider-specific POSIX file lock around the read-modify-write cycle, preserving the existing process-local lock while preventing lost snapshot updates if WebUI is deployed with multiple worker processes sharing one Hermes home/state directory.
+- **PR #2431** by @Michaelyklam (fixes #2429) — Chat sends now render the assistant-side pending `Thinking…` placeholder immediately after the user turn is echoed, before `/api/chat/start` returns a stream id or the first SSE event arrives. The existing stale-stream guard remains in place for ordinary reasoning updates — only the explicit pre-stream placeholder path is allowed through.
+- **PR #2427** by @franksong2702 (fixes #2423) — Recover already-journaled visible assistant text and tool cards when a WebUI process restart interrupts an in-flight browser-originated turn. The stale-stream repair path now materializes run-journal output before the explicit interrupted marker instead of collapsing the turn to "no agent output was recovered."
+
+### Documentation
+
+- **PR #2416** by @Michaelyklam (refs #1925) — Expand the runtime-adapter RFC with the concrete Slice 2 adapter-seam contract: minimal `RuntimeAdapter` methods, payload fields, `legacy-direct` / `legacy-journal` feature-flag rollback path, legacy-backend mapping, explicit non-goals, and adapter-seam acceptance tests. Keeps the next step scoped to a reversible protocol-translator boundary over the journaled legacy path, not a runner/sidecar or execution-ownership move.
+
+## [v0.51.80] — 2026-05-17 — Release BD (stage-373 — 2-PR batch — provider config flag filter + stale compaction greeting heuristic)
+
+### Fixed
+
+- **PR #2415** by @Michaelyklam (fixes #2399) — `providers.only_configured` and other scalar flags under the top-level `providers:` config mapping no longer appear as fake provider groups in the model picker. Provider detection now only seeds picker groups from known provider ids/aliases or dict-shaped provider configs, so filtering flags cannot render as `Only-Configured`. The gating contract is documented inline in `api/config.py` (within the existing `_PROVIDER_MODELS`/`_PROVIDER_DISPLAY` membership block) so the test_issue604 source-scan stays satisfied.
+- **PR #2417** by @nesquena-hermes (co-authored by @franksong2702, supersedes #2309, closes #2308) — Compressed sessions with hidden "resume active task" context no longer treat a short fresh greeting (`hi`, `hello`, plus 6 CJK greetings) as implicit permission to continue an old agent task. Explicit continuation prompts (`continue`, `resume`, plus 4 CJK continuation phrases) still keep the compacted task context. The new helpers (`_normalize_fresh_chat_text`, `_is_casual_fresh_chat_message`, `_has_task_resume_compaction_marker`, `_context_messages_for_new_turn`) require BOTH the compaction phrase AND a task-resume keyword in the SAME message before treating it as a stale-task marker (precision-preserving guard). Length cap of 24 chars + workspace-prefix normalization + exact greeting-set match prevent false positives. CJK greetings/continuation terms are stored as Python `\u`-escape sequences so `api/streaming.py` passes the `test_title_sanitization::test_title_generation_source_has_no_cjk_literals` English-only-source invariant; runtime values are unchanged. Stage-372 Opus advisor pass caught two CJK codepoint typos (`嘖→嗨`, `哈喂→哈喽`) in the maintainer rebase and corrected them; new regression test `test_all_cjk_greetings_drop_stale_compaction_context` pins all 6 CJK greetings against future codepoint drift with `U+XXXX` failure messages.
+
+## [v0.51.79] — 2026-05-16 — Release BC (stage-372 — 5-PR batch — text-mode image history fix + Activity-group compression boundary + named custom provider routing + quota chip Settings toggle + RFC docs)
+
+### Added
+
+- **PR #2413** (self-built follow-up to v0.51.78's #2082, closes the quota-chip default-on regression) — New "Show provider quota chip in composer" checkbox in Settings → Preferences, default off. When disabled (the new default), the chip is hidden at all viewports and the `/api/provider/quota` fetch is skipped entirely. When enabled, the existing `@media (max-width:1399.98px)` gate from stage-371 still restricts the chip to wide desktops only. Per Nathan's directive 2026-05-16 immediately after stage-371 shipped — users get explicit agency over an ambient composer-chrome element. Wired through `api/config.py` `_SETTINGS_DEFAULTS`, `static/boot.js`, `static/panels.js` round-trip, `static/ui.js` short-circuit-when-disabled, `static/index.html` Settings field, and 11 locales in `static/i18n.js`.
+
+### Fixed
+
+- **PR #2406** by @Michaelyklam (fixes #2398) — The fallback synchronous `POST /api/chat` route now passes the active WebUI config into the conversation-history sanitizer, so text-mode providers do not receive historical native `image_url` content parts when direct API callers use the legacy chat endpoint. This brings the sync route in line with the streaming chat path fixed for #2297.
+- **PR #2408** by @Michaelyklam (fixes #2404) — Auto-compression cards now close the current live Activity burst before rendering, so post-compression tools start a fresh `Activity` row instead of joining the pre-compression tool group across a real timeline/context boundary. Adds a `closeCurrentLiveActivityGroup()` helper that clears the `data-live-activity-current` marker before `appendLiveCompressionCard()` inserts the compression card. Resolves the DEFER from stage-370 Opus advisor review of PR #2390.
+- **PR #2411** by @Michaelyklam (fixes #2405) — Named `custom:*` providers no longer lose vendor-prefixed model selections when the static model picker has not hydrated that model yet. The frontend now treats named custom providers as routable aggregators for both mismatch-warning suppression and missing-dropdown fallback, and live-fetched models keep explicit `@custom:name:` provider context so selections persist instead of snapping back to the configured default.
+
+### Documentation
+
+- **PR #2407** by @Michaelyklam — Document the #1925 runtime-adapter gate update: Slice 1 run-journal replay has now passed a 100-trial synthetic replay/restart validation pass on current `origin/master`, #2313's selected-session chat SSE cap is shipped, and Slice 2 is ready for a reversible adapter-seam planning PR without moving execution ownership yet.
+
+### Test infrastructure
+
+- New regression test `tests/test_quota_chip_settings_toggle.py` (6 cases) pins the quota-chip toggle invariants: Settings field present with i18n labels, `show_quota_chip` default-`False` in `_SETTINGS_DEFAULTS` + `_SETTINGS_BOOL_KEYS`, render/refresh both short-circuit when disabled (no wasted API calls), boot initializes `window._showQuotaChip` from settings + default-false on settings-fetch failure, full panels.js round-trip, 11 locale strings present.
+
+## [v0.51.78] — 2026-05-16 — Release BB (stage-371 — stuck-PR sweep salvage — RTL chat + ambient quota chip with composer-clutter gate)
+
+### Added
+
+- **PR #2409** (maintainer follow-up from 2026-05-16 stuck-PR sweep, co-authored by @malulian and @ai-ag2026, closes #1721 and #2082) — Two stalled contributor PRs absorbed into one self-built release after Telegram UX approval across mobile/laptop/desktop/wide viewports.
+  - **Right-to-left chat layout (salvaged from #1721 by @malulian)** — New Settings → Preferences toggle, default off, flips the chat-area direction for Arabic and Hebrew users. Honors @aronprins' design review on PR #1721 (May 13 2026): drops the contributor's composer footer toggle button to keep composer real estate clean. Implementation includes a flash-prevention bootstrap `<script>` in `<head>` (applies `chat-content-rtl` class synchronously before any chat content paints), scoped CSS that only flips `.msg-row`, `.msg-body` tables, `.tool-call-group-summary`, and the composer `textarea#msg` — the sidebar, workspace panel, settings panel, and any other UI element stay left-to-right. Code blocks (`pre`, `code`, `kbd`, `samp`, `tt`, `.hljs`, `.code-block`) and tool-call group bodies force `direction:ltr; text-align:left; unicode-bidi:isolate` even under RTL, because Arabic and Hebrew developers still write English code, command lines, and JSON the same way English developers do (visually verified with embedded Python in an Arabic SSE conversation). Localized in 11 locales (en, it, ja, ru, es, de, zh-CN, zh-TW, pt, ko, fr).
+  - **Ambient provider quota chip (overridden from #2082 by @ai-ag2026)** — New green pill chip in the composer footer that surfaces the active provider's remaining quota (OpenRouter credit balance shaped as `$X.YZ`, or account-limit-shaped providers as `N%`), with click-through to Settings → Providers. Fetches `/api/provider/quota` on boot and on tab visibility return. Hidden below 1400px viewport via `@media (max-width:1400px) { display:none !important }` because the composer footer at 1280px laptop and 1440px standard desktop was already tight and the chip squeezed adjacent chips (model picker truncated from `Claude Sonnet 4 7` to `Claude Sonnet 4`, workspace dropdown lost text). Mobile users find quota through the dedicated mobile-config drawer; laptop users follow the chip's click-target into Settings → Providers anyway. The chip's value proposition (ambient quota visibility) is preserved on wide displays where there's genuine composer room without trading off existing chip readability.
+
+### Test infrastructure
+
+- New regression test `tests/test_pr1721_rtl_salvage.py` (8 cases) pins the RTL salvage invariants: Settings field + i18n keys present, no composer footer button (negative assertion encoding @aronprins' design objection), bootstrap script runs synchronously in `<head>` before paint, CSS scoped to chat only (negative tests against `.sidebar`, `.settings-panel`, `.workspace-panel`, `html`, `body` rules), code blocks force LTR under RTL, tool-call bodies force LTR under RTL, panels.js load/save round-trip, `rtl` in `api/config.py` DEFAULTS and writable-key allow-list, 11 locale strings present.
+
+## [v0.51.77] — 2026-05-16 — Release BA (stage-370 — 1-PR follow-up — live Activity grouping boundary fix)
+
+### Fixed
+
+- **PR #2390** by @franksong2702 (refs #2376, #2344, #2347, #2377) — Live progress Activity grouping no longer degrades consecutive tool calls into repeated `Activity: 1 tool` rows. The frontend was using one reset helper for two different jobs — resetting where the next assistant text segment should render, and closing the current live Activity group — but those are not the same operation. Tool starts now only reset the next-text-segment anchor; the live Activity group closes only when the model emits a visible `interim_assistant` progress update (the actual timeline boundary). The flow stays:
+
+  ```text
+  Thinking card
+  visible progress note
+  Activity: N related tools
+  visible progress note
+  Activity: N related tools
+  final answer
+  ```
+
+  Adds a WebUI-only ephemeral progress contract in `api/streaming.py` that asks multi-step tool-heavy turns to emit concise visible progress notes in the user's language, while explicitly forbidding exposure of hidden reasoning, chain-of-thought, scratchpads, secrets, raw logs, or long tool output. Any selected personality prompt is preserved. New regressions cover the progress-contract reach-through, the interim-assistant split boundary, and the consecutive-tools-in-one-Activity-row invariant.
+
+## [v0.51.76] — 2026-05-16 — Release AZ (stage-369 — 4-PR safe-lane batch — live timeline preservation + OpenRouter cost history + chat stream cap + credential pool cache)
+
+### Added
+
+- **PR #2195** by @Michaelyklam (refs #692) — OpenRouter cost history backend. New `GET /api/providers/openrouter/cost_history` endpoint backed by daily snapshots from OpenRouter's `/auth/key` cumulative spend. Process-local lock around the snapshot read-modify-write critical section so concurrent dashboard refreshes or multiple tabs cannot overwrite newer reads with stale ones. Delta computation handles cumulative-counter resets (key rotation, OpenRouter-side reset) by starting a fresh series and using the current value as that day's delta rather than emitting negative spend. Backend-only slice; the 7-day daily cost chart UI is a separate follow-up.
+
+### Fixed
+
+- **PR #2347** by @franksong2702 (fixes #2344) — Preserve live agent timeline across session switches. Previously, switching away from an active stream and returning rebuilt the turn from the persisted `INFLIGHT` tail, which is enough to reconnect the stream but is not a full-fidelity DOM timeline — Thinking/tool grouping flattened, interim assistant text moved away from its surrounding context, auto-compression cards could project twice. The restore path now snapshots the live assistant turn DOM during the active stream and, on return, loads the persisted transcript first then merges the live snapshot back in so the on-screen scene is preserved as the user left it. Stamping `row.dataset.sessionId` at turn creation prevents the new live-turn sites from re-triggering the lossy rebuild path.
+
+- **PR #2393** by @Michaelyklam (refs #2313) — Cap live chat stream transports to the selected conversation. Previously, keeping many sessions open accumulated one long-lived `/api/chat/stream` EventSource per session. New `closeOtherLiveStreams(activeSid)` helper in `static/messages.js`; `attachLiveStream()` now reuses an existing same-session transport first, closes other sessions' chat SSE transports, then opens or replaces the selected session's stream. Background sessions still reattach normally when the user selects them — only the SSE transport is pruned, not the server-side stream ownership. New regression test pins the ordering (reuse first, prune background streams next, replace active transport last).
+
+- **PR #2396** by @starship-s — Preserve session agents for credential pools. The per-session `AIAgent` cache signature previously mixed stable agent identity with the volatile resolved API key, so credential-pool providers (where each request can resolve a different runtime token even when provider/model config is unchanged) missed the cache every turn and rebuilt the agent — losing warmed cross-turn state such as memory-provider prefetch results for providers like Hindsight. New credential-aware cache-signature helper uses a stable sentinel for credential-pool routes while preserving hashed API-key identity for non-pool routes; reused cached agents refresh runtime credentials in place; `AIAgent._primary_runtime` stays aligned after refresh so fallback/transport recovery cannot resurrect an old token; agents still in fallback-active state rebuild rather than mutate to avoid mixed primary/fallback runtime state. Static non-pool API keys still participate in the cache signature so explicit credential changes continue to invalidate.
+
+## [v0.51.75] — 2026-05-16 — Release AY (stage-368 — 11-PR safe-lane batch — storage + i18n + run-journal parity + attachments + compression sidebar + restart-recovery + text-mode images + tables + settings i18n + German labels)
+
+### Test infrastructure
+
+- Stage-368 maintainer fix — pytest no longer self-loops on the `_schedule_restart` daemon thread. Several existing tests in `tests/test_update_banner_fixes.py` call `api.updates._schedule_restart()`, which spawns a daemon thread that eventually calls `os.execv()`. Those tests monkeypatch `os.execv` for the test scope, but monkeypatch teardown can win the race against the daemon thread, restoring the real `os.execv` before the thread fires it — at which point the daemon re-execs the entire pytest process with the original argv, looking from the outside like pytest hangs at 99 % then restarts the suite from 0 % in an infinite loop. `tests/conftest.py` now installs a permanent no-op wrapper on `os.execv` at module-import time so late-firing daemon threads cannot re-exec pytest. New `tests/test_pytest_execv_guard.py` pins the guard against future regressions.
+
+### Added
+
+- **PR #2377** by @franksong2702 (refs #2283, refs #2363, refs #1925) — Run-journal replay timeline parity checks. After #2283 shipped the first run-journal replay slice and #2363 documented the cross-layer state consistency contract, this PR adds explicit parity assertions over the replayed timeline so divergences between the journal and the visible transcript (Thinking → tool calls → assistant text) surface as test failures instead of silent drift.
+
+### Fixed
+
+- **PR #2391** by @Michaelyklam (fixes #2389) — Reduce browser storage pressure during service-worker updates and over long-running sessions. `static/sw.js` now calls `deleteOldShellCaches()` BEFORE `caches.open(CACHE_NAME)` in the install handler so the new ~2.2 MB shell cache no longer overlaps the old one during a version bump (especially painful on shared-origin quota accounting). A new `_clearSessionViewedCount()` helper plus extended `_clearHandoffStorageForSession()` prune `hermes-session-viewed-counts`, `hermes-session-completion-unread`, and `hermes-session-observed-streaming` on every single-session delete and batch-delete so per-session tracking maps no longer grow unbounded.
+
+- **PR #2387** by @Michaelyklam (fixes #2386) — Guard `localStorage.setItem('hermes-webui-session', ...)` and workspace-panel runtime-state writes with `try { … } catch (_) {}` across `static/boot.js`, `static/sessions.js`, `static/commands.js`, and `static/messages.js`. These convenience writes were previously fatal UI operations on quota-exhausted browsers (especially Firefox public-domain setups where shared quota fills up after a service-worker shell rotation).
+
+- **PR #2368** by @Michaelyklam — Hybridize background profile env routing so background title generation, manual compression, and update-summary workers honor a session's non-default profile. The pure thread-local refactor for #2321 was reverted because `hermes_cli.config.load_config()` still reads `HERMES_HOME` from process env. This PR keeps the thread-local layer for WebUI helpers and adds an `os.environ.update(runtime_env)` mirror under a narrow `_ENV_LOCK` for the worker body, with proper restore of prior values. New test asserts `OPENROUTER_API_KEY` is visible from the worker against a non-default profile.
+
+- **PR #2382** by @Michaelyklam (fixes #2380) — Serve raw chat attachments from the per-session inbox in addition to the session workspace. Chat uploads were intentionally moved out of workspaces into a per-session attachment inbox in an earlier release; the transcript renderer still emits stable `api/file/raw?session_id=...&path=<filename>` URLs, but `_handle_file_raw` only checked `session.workspace` so inbox-backed uploads rendered as broken images. The URL surface is preserved and a session-attachment fallback is added with path-traversal guards intact.
+
+- **PR #2385** by @franksong2702 — Keep fuller compression snapshots reachable in the sidebar. The default behavior hides `pre_compression_snapshot: true` rows so archived compression segments do not duplicate the active continuation. A real long Kanban session exposed a narrower failure: the fuller transcript was still present on disk but remained marked as `pre_compression_snapshot`, so the sidebar surfaced a shorter row and the fuller transcript became unreachable. The fix preserves discoverability without re-introducing duplication in normal cases.
+
+- **PR #2371** by @franksong2702 — Clarify interrupted turn recovery after a WebUI restart. WebUI executes browser-originated agent turns inside the WebUI process; if that process restarts mid-turn, the worker dies with it. Run journal replay can only replay events that were already emitted, so the stale-pending repair path is now annotated and refined to make the post-restart state explicit (interrupted, recoverable, or terminal) instead of leaving the user with a half-rendered turn and no signal.
+
+- **PR #2378** by @Michaelyklam — Strip historical images in text-only mode. Current-turn uploads already respect `agent.image_input_mode: text`, but saved conversation history still passed native `image_url` content parts back into later provider calls, breaking text-only providers on replayed turns. `_sanitize_messages_for_api()` gains a `cfg=` keyword argument so the API-history sanitizer can strip historical native image parts when the mode is text. Default `cfg=None` preserves prior behavior for callers that don't pass the new argument.
+
+- **PR #2375** by @Michaelyklam — Keep Markdown tables block-level. Pipe tables were already converted to `<table>` markup, but the final paragraph pass did not treat generated tables as block-level output, occasionally wrapping them in `<p>` and breaking the surrounding layout. The fix isolates generated tables and adds `table` to the paragraph-wrap skip list so valid CommonMark tables render predictably.
+
+- **PR #2372** by @mccxj — Settings → Conversation page action buttons now respect locale selection. Pre-fix, the JSON export, MD export, and Copy buttons had hardcoded English labels/titles. Adds `data-i18n` / `data-i18n-title` attributes plus the missing translation keys so non-English locales no longer see English labels stuck in the middle of a translated screen.
+
+- **PR #2381** by @Michaelyklam (fixes #2379) — German relative session-time labels now interpolate the elapsed value instead of rendering the literal `{n}` placeholder in the sidebar/header. The German locale now uses function-valued translations for minutes, hours, and days, matching the other locale bundles.
+
 ## [v0.51.74] — 2026-05-16 — Release AX (stage-367 — 4-PR safe-lane batch — #2362 table-cell spacing + #2363 run-state-consistency RFC + #2365 custom_providers list-format + #2367 settings sidebar i18n)
 
 ### Added
@@ -59,6 +189,8 @@
 ## [v0.51.69] — 2026-05-15 — Release AT (stage-362 — 8-PR follow-up batch — Ollama routing + legacy toolset + cancel copy + cleanup + custom provider mismatch + cron metadata + dead-code removal; #2323 reverted after Opus-caught silent regression, refiled as #2321 reopen)
 
 ### Added
+
+- **PR #2347** by @franksong2702 — Long tool-heavy streaming turns now preserve the live Thinking / assistant progress / Tool / Command timeline when the user switches away and back. The active stream keeps accumulating token and interim-assistant state while inactive, reloads the persisted transcript before merging the live tail, restores the live turn DOM snapshot instead of replaying tools into a flat list, and anchors automatic compression cards inside the active turn to avoid duplicate cards while an answer is still streaming.
 
 - **PR #2332** by @Michaelyklam (refs #2290) — Cron run history/output cards now surface token/cost metadata when the underlying cron output markdown includes it. The backend parses optional model/token/cost/duration frontmatter from cron output files and returns it from `/api/crons/history` and `/api/crons/run`; the Tasks panel renders a compact usage strip beside run rows and below expanded output without affecting older outputs that lack usage metadata.
 

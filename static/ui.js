@@ -634,6 +634,91 @@ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded'
 else _initMediaPlaybackObserver();
 setTimeout(_initMediaPlaybackObserver,0);
 
+// ── Ambient provider quota indicator (#1766) ────────────────────────────────
+let _providerQuotaRefreshInFlight=false;
+
+function _formatQuotaMoneyShort(value){
+  const n=Number(value);
+  if(!Number.isFinite(n)) return '';
+  if(Math.abs(n)>=100) return '$'+n.toFixed(0);
+  if(Math.abs(n)>=10) return '$'+n.toFixed(1);
+  return '$'+n.toFixed(2);
+}
+function _formatQuotaPercentShort(value){
+  const n=Number(value);
+  if(!Number.isFinite(n)) return '';
+  return Math.max(0,Math.min(100,n)).toFixed(0)+'%';
+}
+function _providerQuotaIndicatorText(status){
+  if(!status||status.status!=='available') return null;
+  const provider=status.display_name||status.provider||'Provider';
+  const accountLimits=status.account_limits||null;
+  if(accountLimits&&Array.isArray(accountLimits.windows)&&accountLimits.windows.length){
+    const w=accountLimits.windows.find(x=>x&&Number.isFinite(Number(x.remaining_percent)))||accountLimits.windows[0];
+    const remaining=_formatQuotaPercentShort(w&&w.remaining_percent);
+    if(remaining) return {label:provider+' '+remaining, title:(status.message||'Provider usage loaded')+' — '+remaining+' remaining'};
+  }
+  const quota=status.quota||null;
+  if(quota){
+    const remaining=_formatQuotaMoneyShort(quota.limit_remaining);
+    const used=_formatQuotaMoneyShort(quota.usage);
+    const limit=_formatQuotaMoneyShort(quota.limit);
+    if(remaining){
+      const parts=[];
+      if(used) parts.push('used '+used);
+      if(limit) parts.push('limit '+limit);
+      return {label:provider+' '+remaining, title:(status.message||'Provider quota loaded')+(parts.length?' — '+parts.join(' · '):'')};
+    }
+  }
+  return null;
+}
+function renderProviderQuotaIndicator(status){
+  const chip=$('providerQuotaChip');
+  const label=$('providerQuotaChipLabel');
+  if(!chip||!label) return;
+  // Hide entirely when the user has disabled the ambient quota chip in Settings.
+  // Default is off (window._showQuotaChip defaults to false in boot.js) so users
+  // never see the chip unless they opt in.
+  if(window._showQuotaChip!==true){
+    chip.hidden=true;
+    label.textContent='';
+    chip.removeAttribute('title');
+    return;
+  }
+  const text=_providerQuotaIndicatorText(status);
+  if(!text||status.status!=='available'||(!status.quota&&!status.account_limits)){
+    chip.hidden=true;
+    label.textContent='';
+    chip.removeAttribute('title');
+    return;
+  }
+  label.textContent=text.label;
+  chip.title=text.title;
+  chip.hidden=false;
+}
+async function refreshProviderQuotaIndicator(){
+  // Short-circuit before the fetch when the chip is disabled — no point asking
+  // the server for quota data the UI will throw away.
+  if(window._showQuotaChip!==true){
+    const chip=$('providerQuotaChip');
+    if(chip){chip.hidden=true;chip.removeAttribute('title');}
+    return;
+  }
+  if(_providerQuotaRefreshInFlight) return;
+  _providerQuotaRefreshInFlight=true;
+  try{
+    const status=await api('/api/provider/quota');
+    renderProviderQuotaIndicator(status);
+  }catch(_e){
+    renderProviderQuotaIndicator(null);
+  }finally{
+    _providerQuotaRefreshInFlight=false;
+  }
+}
+window.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible'&&typeof refreshProviderQuotaIndicator==='function') refreshProviderQuotaIndicator();
+});
+
 // Dynamic model labels -- populated by populateModelDropdown(), fallback to static map
 let _dynamicModelLabels={};
 window._configuredModelBadges=window._configuredModelBadges||{};
@@ -659,6 +744,18 @@ function _providerFromModelValue(modelId){
   const value=String(modelId||'').trim();
   if(value.startsWith('@')&&value.includes(':')) return value.slice(1,value.lastIndexOf(':'));
   return '';
+}
+function _providerSkipsModelMismatchWarning(providerId){
+  const p=String(providerId||'').toLowerCase();
+  return !p||p==='custom'||p.startsWith('custom:')||p==='openrouter';
+}
+function _providerDefersMissingModelFallback(providerId){
+  const p=String(providerId||'').toLowerCase();
+  // Named custom providers and OpenRouter can legitimately route vendor-prefixed
+  // model IDs that are not present in the current static catalog. Do not
+  // silently rewrite those sessions to the default just because the option has
+  // not been hydrated yet (#2405).
+  return p.startsWith('custom:')||p==='openrouter';
 }
 function _modelStateForSelect(sel, modelId){
   const value=String(modelId||'').trim();
@@ -921,21 +1018,20 @@ function _addLiveModelsToSelect(provider, models, sel){
     sel.appendChild(providerGroup);
   }
   const existingIds=new Set([...sel.options].map(o=>o.value));
-  // Normalized dedup: strip @provider: prefix and unify separators so
+  // Normalized dedup: strip one @provider: prefix and namespace so
   // 'minimax/minimax-m2.7' matches '@nous:minimax/minimax-m2.7' (#907).
-  // Strip ONLY the first colon — Ollama tag IDs are multi-colon
-  // (e.g. '@ollama-cloud:qwen3-vl:235b-instruct') and split(':',2) would
-  // truncate the tag suffix in JS (the limit arg discards extras, unlike Python).
   const _normId=id=>{
     let s=String(id||'');
-    if(s.startsWith('@')&&s.includes(':')) s=s.substring(s.indexOf(':')+1); // strip only @provider:
-    s=s.split('/').pop();                                                    // strip namespace prefix
+    if(s.startsWith('@')&&s.includes(':')) s=s.substring(s.indexOf(':')+1);
+    s=s.split('/').pop();
     return s.replace(/-/g,'.').toLowerCase();
   };
   const existingNorm=new Set([...sel.options].map(o=>_normId(o.value)));
   let added=0;
   const _ap=(window._activeProvider||'').toLowerCase();
-  const _isPortalFetch=_ap && _ap!=='openrouter' && _ap!=='custom' && _ap!=='openai-codex' && provider===_ap;
+  const _providerLower=String(provider||'').toLowerCase();
+  const _isNamedCustomActiveProvider=_ap.startsWith('custom:');
+  const _isPortalFetch=_ap && _ap!=='openrouter' && _ap!=='custom' && _ap!=='openai-codex' && (_providerLower===_ap||_isNamedCustomActiveProvider&&_providerLower===_ap);
   for(const m of models){
     let mid=m.id;
     if(_isPortalFetch && !mid.startsWith('@')){
@@ -1006,7 +1102,7 @@ async function _fetchLiveModels(provider, sel){
  */
 function _checkProviderMismatch(modelId){
   const ap=(window._activeProvider||'').toLowerCase();
-  if(!ap||ap==='custom'||ap.startsWith('custom:')||ap==='openrouter') return null; // can't reliably check
+  if(_providerSkipsModelMismatchWarning(ap)) return null; // can't reliably check
   // @provider: prefixed IDs came from that provider's live model list — no mismatch possible
   if(modelId.startsWith('@')) return null;
   const slash=modelId.indexOf('/');
@@ -2024,12 +2120,14 @@ function _syncCtxIndicator(usage){
   // branch below — honest "no data" instead of misleading "890% used".
   const promptTok=usage.last_prompt_tokens||0;
   const totalTok=(usage.input_tokens||0)+(usage.output_tokens||0);
+  const cacheReadTok=usage.cache_read_tokens||0;
+  const cacheWriteTok=usage.cache_write_tokens||0;
   // Default context window to 128K when not provided by backend
   const DEFAULT_CTX=128*1024;
   const ctxWindow=usage.context_length||DEFAULT_CTX;
   const cost=usage.estimated_cost;
   // Show indicator whenever we have any usage data (tokens or cost)
-  if(!promptTok&&!totalTok&&!cost){
+  if(!promptTok&&!totalTok&&!cost&&!cacheReadTok&&!cacheWriteTok){
     if(wrap) wrap.style.display='none';
     _syncMobileCtxDisplay({visible:false});
     return;
@@ -2062,9 +2160,13 @@ function _syncCtxIndicator(usage){
   const compressText=pct>=75?t('ctx_compress_action'):(pct>=50?t('ctx_compress_hint'):'');
   if(compressWrap) compressWrap.style.display=compressText?'':'none';
   _setCtxCompressButton(compressBtn,compressText);
+  const cacheTotalTok=cacheReadTok+cacheWriteTok;
+  const cacheHitPct=cacheTotalTok?Math.round((cacheReadTok/cacheTotalTok)*100):null;
+  const cacheText=cacheTotalTok?`cache: ${cacheHitPct}% hit (${_fmtTokens(cacheReadTok)} read / ${_fmtTokens(cacheWriteTok)} write)`:'';
   let label=hasPromptTok?`Context window ${pct}% used`:`${_fmtTokens(totalTok)} tokens used`;
   if(!hasExplicitCtx&&hasPromptTok) label+=' (est. 128K)';
   if(cost) label+=` \u00b7 $${cost<0.01?cost.toFixed(4):cost.toFixed(2)}`;
+  if(cacheText) label+=` \u00b7 ${cacheText}`;
   el.setAttribute('aria-label',label);
   const usageText=hasPromptTok?(overflowed?`${rawPct}% used (context exceeded)`:`${pct}% used (${100-pct}% left)`):`${_fmtTokens(totalTok)} tokens used`;
   const tokensText=hasPromptTok?`${_fmtTokens(promptTok)} / ${_fmtTokens(ctxWindow)} tokens used`:`In: ${_fmtTokens(usage.input_tokens||0)} \u00b7 Out: ${_fmtTokens(usage.output_tokens||0)}`;
@@ -2086,6 +2188,11 @@ function _syncCtxIndicator(usage){
   if(costLine){
     if(cost){
       costText=`Estimated cost: $${cost<0.01?cost.toFixed(4):cost.toFixed(2)}`;
+      if(cacheText) costText+=` \u00b7 ${cacheText}`;
+      costLine.style.display='';
+      costLine.textContent=costText;
+    }else if(cacheText){
+      costText=cacheText;
       costLine.style.display='';
       costLine.textContent=costText;
     }else{
@@ -2480,7 +2587,7 @@ function renderMd(raw){
   s=s.replace(/\\\[([\s\S]+?)\\\]/g,(_,m)=>{math_stash.push({type:'display',src:m});return '\x00M'+(math_stash.length-1)+'\x00';});
   // Inline math: $...$ — require non-space at boundaries to avoid false positives
   // e.g. "costs $5 and $10" should not trigger (space after opening $)
-  s=s.replace(/\$([^\s$\n][^$\n]*?[^\s$\n]|\S)\$/g,(_,m)=>{math_stash.push({type:'inline',src:m});return '\x00M'+(math_stash.length-1)+'\x00';});
+  s=s.replace(/\$([^\s$\n][^$\n]*?[^\s$\n]|\S)\$/g,(_,m)=>{if(m.includes(' | '))return '\$'+m+'\$';math_stash.push({type:'inline',src:m});return '\x00M'+(math_stash.length-1)+'\x00';});
   // Also stash \(...\) LaTeX delimiters.
   // Match a single literal backslash before the delimiter (the common LLM form).
   s=s.replace(/\\\((.+?)\\\)/g,(_,m)=>{math_stash.push({type:'inline',src:m});return '\x00M'+(math_stash.length-1)+'\x00';});
@@ -2610,11 +2717,26 @@ function renderMd(raw){
     if(rows.length<2)return block;
     const isSep=r=>/^\|[\s|:-]+\|$/.test(r.trim());
     if(!isSep(rows[1]))return block;
-    const parseRow=r=>r.trim().replace(/^\|/,'').replace(/\|$/,'').split('|').map(c=>`<td>${inlineMd(c.trim())}</td>`).join('');
-    const parseHeader=r=>r.trim().replace(/^\|/,'').replace(/\|$/,'').split('|').map(c=>`<th>${inlineMd(c.trim())}</th>`).join('');
+    // _protectPipes: temporarily swap pipes inside matching bracket pairs for a
+    // sentinel before split('|'), then restore. Iterates until no more matches
+    // so all pipes inside one pair are caught.
+    // Note: both opening and closing brace literals in the character classes
+    // are written as hex escapes (\x7b and \x7d) so the JS source contains no
+    // bare brace glyphs that would confuse the brace-counting extractFunc in
+    // tests/test_renderer_js_behaviour.py. Regex semantics are identical.
+    // Bracket set is paren / square / curly only -- NOT angle brackets, since
+    // angle brackets are overwhelmingly comparison operators in real LLM table
+    // output (`| x < 5 | y > 10 |`) and treating them as a pair collapses cells.
+    const _protectPipes=r=>{let prev;do{prev=r;r=r.replace(/([([\x7b][^)\]\x7d]*)[|]([^)\]\x7d]*[)\]\x7d])/g,(_,a,b)=>a+'\x00PIPE\x00'+b);}while(r!==prev);return r;};
+    const _restorePipes=s=>s.replace(/\x00PIPE\x00/g,'|');
+    const parseRow=r=>{r=_protectPipes(r);return r.trim().replace(/^\|/,'').replace(/\|$/,'').split('|').map(c=>`<td>${inlineMd(_restorePipes(c.trim()))}</td>`).join('');};
+    const parseHeader=r=>{r=_protectPipes(r);return r.trim().replace(/^\|/,'').replace(/\|$/,'').split('|').map(c=>`<th>${inlineMd(_restorePipes(c.trim()))}</th>`).join('');};
     const header=`<tr>${parseHeader(rows[0])}</tr>`;
     const body=rows.slice(2).map(r=>`<tr>${parseRow(r)}</tr>`).join('');
-    return `<table><thead>${header}</thead><tbody>${body}</tbody></table>`;
+    // Surround with blank lines so the final paragraph splitter treats the
+    // generated table as its own block even when the regex consumes one of the
+    // markdown block's trailing newlines.
+    return `\n\n<table><thead>${header}</thead><tbody>${body}</tbody></table>\n\n`;
   });
   // #487: Outer image pass — handles ![alt](url) in plain paragraphs (outside tables/lists).
   // Runs AFTER the table pass (images in table cells are handled by inlineMd() above).
@@ -2757,7 +2879,7 @@ function renderMd(raw){
     return '\x00E'+(_pre_stash.length-1)+'\x00';
   });
   const parts=s.split(/\n{2,}/);
-  s=parts.map(p=>{p=p.trim();if(!p)return '';if(/^<(h[1-6]|ul|ol|pre|hr|blockquote)|^\x00[EQ]/.test(p))return p;return `<p>${p.replace(/\n/g,'<br>')}</p>`;}).join('\n');
+  s=parts.map(p=>{p=p.trim();if(!p)return '';if(/^<(h[1-6]|ul|ol|table|pre|hr|blockquote)|^\x00[EQ]/.test(p))return p;return `<p>${p.replace(/\n/g,'<br>')}</p>`;}).join('\n');
   s=s.replace(/\x00E(\d+)\x00/g,(_,i)=>_pre_stash[+i]);
   // ── Restore MEDIA stash → inline images or download links ─────────────────
   s=s.replace(/\x00D(\d+)\x00/g,(_,i)=>{
@@ -3717,6 +3839,67 @@ function clearInflightState(sid){
   }catch(_){ }
 }
 
+function snapshotLiveTurnHtmlForSession(sid){
+  // Keep the DOM snapshot memory-only. Persisted INFLIGHT state intentionally
+  // stores structured stream state, not outerHTML, so a hard reload still uses
+  // the safer flat replay path instead of reviving stale nodes/listeners.
+  if(!sid||!INFLIGHT[sid]) return;
+  const turn=$('liveAssistantTurn');
+  if(!turn) return;
+  if(turn.dataset&&turn.dataset.sessionId&&turn.dataset.sessionId!==sid) return;
+  INFLIGHT[sid].liveTurnHtml=turn.outerHTML;
+}
+
+function _liveAssistantSegmentTextLength(seg){
+  if(!seg) return 0;
+  const body=seg.querySelector('.msg-body')||seg;
+  return String(body.textContent||'').trim().length;
+}
+
+function _mergeRestoredLiveAssistantSegment(restored, existing){
+  if(!restored||!existing) return;
+  const existingLive=existing.querySelector('[data-live-assistant="1"]');
+  if(!existingLive) return;
+  const restoredLive=restored.querySelector('[data-live-assistant="1"]');
+  const existingLen=_liveAssistantSegmentTextLength(existingLive);
+  const restoredLen=_liveAssistantSegmentTextLength(restoredLive);
+  if(existingLen<=restoredLen) return;
+  const replacement=existingLive.cloneNode(true);
+  if(restoredLive){
+    restoredLive.replaceWith(replacement);
+    return;
+  }
+  const blocks=_assistantTurnBlocks(restored);
+  if(!blocks) return;
+  const anchor=Array.from(blocks.children).filter(el=>
+    el.matches('.tool-call-group,.tool-card-row,.agent-activity-thinking,.thinking-card-row,[data-live-assistant="1"]')
+  ).pop();
+  if(anchor) anchor.insertAdjacentElement('afterend', replacement);
+  else blocks.appendChild(replacement);
+}
+
+function restoreLiveTurnHtmlForSession(sid){
+  const inflight=INFLIGHT[sid];
+  if(!sid||!inflight||!inflight.liveTurnHtml) return false;
+  const inner=$('msgInner');
+  if(!inner) return false;
+  const template=document.createElement('template');
+  template.innerHTML=String(inflight.liveTurnHtml||'').trim();
+  const restored=template.content.firstElementChild;
+  if(!restored) return false;
+  restored.id='liveAssistantTurn';
+  if(S.session) restored.dataset.sessionId=S.session.session_id;
+  const existing=$('liveAssistantTurn');
+  _mergeRestoredLiveAssistantSegment(restored, existing);
+  if(existing) existing.replaceWith(restored);
+  else inner.appendChild(restored);
+  const liveGroup=restored.querySelector('.tool-call-group[data-live-tool-call-group="1"]');
+  if(liveGroup&&typeof _startActivityElapsedTimer==='function') _startActivityElapsedTimer(liveGroup);
+  if(typeof placeLiveToolCardsHost==='function') placeLiveToolCardsHost();
+  requestAnimationFrame(()=>postProcessRenderedMessages(restored));
+  return true;
+}
+
 function markInflight(sid, streamId) {
   localStorage.setItem(INFLIGHT_KEY, JSON.stringify({sid, streamId, ts: Date.now()}));
 }
@@ -4472,13 +4655,16 @@ function syncTopbar(){
       // default rather than silently retaining the previous chat's selection (#1771).
       if(!applied){
         const deferModelCorrection=Boolean(S.session._modelResolutionDeferred);
+        const missingModelIsRoutable=_providerDefersMissingModelFallback(S.session.model_provider||window._activeProvider||null);
         // Also defer if a live model fetch is still in flight — the model may be
         // in the list once the fetch completes. Persisting now would corrupt the
         // session with the wrong model before live models arrive (#1169).
         const liveStillPending=window._activeProvider&&_liveModelFetchPending.has(window._activeProvider);
-        if(liveStillPending){
+        if(liveStillPending||missingModelIsRoutable){
           // Live fetch in flight — don't touch sel.value or S.session.model yet.
           // _addLiveModelsToSelect() will re-apply S.session.model once done (#1169).
+          // Named custom providers/OpenRouter can also route vendor-prefixed IDs
+          // outside the static catalog, so preserve the user's explicit choice.
         } else {
           const fallback=_applySessionModelFallback(modelSel);
           if(fallback&&!deferModelCorrection){
@@ -4568,23 +4754,26 @@ function _createAssistantTurn(tsTitle='', tpsText=''){
   const row=document.createElement('div');
   row.className='msg-row assistant-turn';
   row.dataset.role='assistant';
+  if(S.session) row.dataset.sessionId=S.session.session_id;
   row.innerHTML=`${_assistantRoleHtml(tsTitle, tpsText)}<div class="assistant-turn-blocks"></div>`;
   return row;
 }
 function _assistantTurnBlocks(turn){
   return turn?turn.querySelector('.assistant-turn-blocks'):null;
 }
-function _thinkingCardHtml(text){
+function _thinkingCardHtml(text, open){
   const clean=_sanitizeThinkingDisplayText(text);
-  return `<div class="thinking-card"><div class="thinking-card-header" onclick="this.parentElement.classList.toggle('open')"><span class="thinking-card-icon">${li('lightbulb',14)}</span><span class="thinking-card-label">${t('thinking')}</span><span class="thinking-card-toggle">${li('chevron-right',12)}</span></div><div class="thinking-card-body"><pre>${esc(clean)}</pre></div></div>`;
+  return open
+    ? `<div class="thinking-card open"><div class="thinking-card-header" onclick="this.parentElement.classList.toggle('open')"><span class="thinking-card-icon">${li('lightbulb',14)}</span><span class="thinking-card-label">${t('thinking')}</span><span class="thinking-card-toggle">${li('chevron-right',12)}</span></div><div class="thinking-card-body"><pre>${esc(clean)}</pre></div></div>`
+    : `<div class="thinking-card"><div class="thinking-card-header" onclick="this.parentElement.classList.toggle('open')"><span class="thinking-card-icon">${li('lightbulb',14)}</span><span class="thinking-card-label">${t('thinking')}</span><span class="thinking-card-toggle">${li('chevron-right',12)}</span></div><div class="thinking-card-body"><pre>${esc(clean)}</pre></div></div>`;
 }
 function isSimplifiedToolCalling(){
   return window._simplifiedToolCalling!==false;
 }
-function _thinkingActivityNode(text){
+function _thinkingActivityNode(text, open){
   const row=document.createElement('div');
   row.className='agent-activity-thinking';
-  row.innerHTML=_thinkingCardHtml(text);
+  row.innerHTML=_thinkingCardHtml(text, open);
   return row;
 }
 // ── Activity-group user expand intent (#1298) ──────────────────────────────
@@ -4649,7 +4838,7 @@ function ensureActivityGroup(inner, opts){
   if(!inner) return null;
   const live=!!opts.live;
   const activityKey=opts.activityKey||(live?_activityKeyForLiveTurn():null);
-  const selector=live?'.tool-call-group[data-live-tool-call-group="1"]':'.tool-call-group[data-agent-activity-group="1"]';
+  const selector=live?'.tool-call-group[data-live-tool-call-group="1"][data-live-activity-current="1"]':'.tool-call-group[data-agent-activity-group="1"]';
   let group=inner.querySelector(selector);
   if(!group){
     group=document.createElement('div');
@@ -4666,7 +4855,10 @@ function ensureActivityGroup(inner, opts){
     group.setAttribute('data-tool-call-group','1');
     group.setAttribute('data-agent-activity-group','1');
     if(activityKey) group.setAttribute('data-activity-disclosure-key',activityKey);
-    if(live) group.setAttribute('data-live-tool-call-group','1');
+    if(live){
+      group.setAttribute('data-live-tool-call-group','1');
+      group.setAttribute('data-live-activity-current','1');
+    }
     group.innerHTML=`<button type="button" class="tool-call-group-summary" aria-expanded="${collapsed?'false':'true'}" onclick="_toggleActivityGroup(this)"><span class="tool-call-group-chevron">${li('chevron-right',12)}</span><span class="tool-call-group-label">Activity</span><span class="tool-call-group-duration"></span></button><div class="tool-call-group-body"></div>`;
     const anchor=opts.anchor||null;
     if(anchor&&anchor.parentElement===inner) anchor.insertAdjacentElement('afterend', group);
@@ -4678,6 +4870,13 @@ function ensureActivityGroup(inner, opts){
   _syncToolCallGroupSummary(group);
   if(live) _startActivityElapsedTimer(group);
   return group;
+}
+function closeCurrentLiveActivityGroup(){
+  const turn=$('liveAssistantTurn');
+  if(!turn) return;
+  turn.querySelectorAll('.tool-call-group[data-live-tool-call-group="1"][data-live-activity-current="1"]').forEach(group=>{
+    group.removeAttribute('data-live-activity-current');
+  });
 }
 function _compressionStateForCurrentSession(){
   const state=window._compressionUi;
@@ -4768,17 +4967,24 @@ function _compressionCardsHtml(state){
 }
 function _autoCompressionCardsHtml(state){
   const fallback='Context auto-compressed to continue the conversation';
-  const detail=String(state.message||fallback).trim()||fallback;
-  const preview=String(state.summary?.headline||detail).trim()||detail;
+  const running=state&&state.phase==='running';
+  const detail=running
+    ? (String(state.message||'Auto-compressing context...').trim()||'Auto-compressing context...')
+    : (String(state.message||fallback).trim()||fallback);
+  const preview=running
+    ? detail
+    : (String(state.summary?.headline||detail).trim()||detail);
   return `
     <div class="tool-card-row compression-card-row" data-compression-card="1">
       ${_compressionStatusCardHtml({
         statusLabel: t('auto_compress_label'),
         previewText: preview,
         detail,
-        icon: li('check',13),
-        open: false,
-        variantClass: 'tool-card-compress-complete tool-card-compress-auto',
+        icon: running ? '<span class="tool-card-running-dot"></span>' : li('check',13),
+        open: running,
+        variantClass: running
+          ? 'tool-card-compress-running tool-card-compress-auto'
+          : 'tool-card-compress-complete tool-card-compress-auto',
       })}
     </div>`;
 }
@@ -4787,6 +4993,27 @@ function _compressionCardsNode(state){
   wrap.className='compression-turn';
   wrap.innerHTML=`<div class="compression-turn-blocks">${_compressionCardsHtml(state)}</div>`;
   return wrap;
+}
+function appendLiveCompressionCard(state){
+  if(!S.session||!S.activeStreamId||!state) return false;
+  let turn=$('liveAssistantTurn');
+  if(!turn){
+    turn=_createAssistantTurn();
+    turn.id='liveAssistantTurn';
+    if(S.session) turn.dataset.sessionId=S.session.session_id;
+    $('msgInner').appendChild(turn);
+  }
+  const inner=_assistantTurnBlocks(turn);
+  if(!inner) return false;
+  closeCurrentLiveActivityGroup();
+  const node=_compressionCardsNode(state);
+  if(!node) return false;
+  node.setAttribute('data-live-compression-card','1');
+  const existing=inner.querySelector('[data-live-compression-card="1"]');
+  if(existing) existing.replaceWith(node);
+  else inner.appendChild(node);
+  if(typeof scrollIfPinned==='function') scrollIfPinned();
+  return true;
 }
 function _isHandoffSummaryToolPayload(value){
   if(!value||typeof value!=='object'||Array.isArray(value)) return false;
@@ -5579,14 +5806,14 @@ function renderMessages(options){
     if(fallbackPosition==='skip') return;
     inner.appendChild(node);
   }
-  function _insertCompressionLikeNodeByRawIdx(node, rawIdx, fallbackPosition){
+  function _insertCompressionLikeNodeByRawIdx(node, rawIdx){
     if(!node) return;
     if(!renderVisWithIdx.length){
-      // personal: empty window — same skip semantics as
-      // _insertCompressionLikeNode so the reference banner doesn't end up
-      // misanchored outside its true timeline position.
-      if(fallbackPosition==='skip') return;
-      inner.appendChild(node);
+      // personal: empty render window — anchor lives outside the loaded
+      // tail.  Skip insertion silently rather than fall through to
+      // inner.appendChild (which would falsely imply a fresh compression
+      // event after the last assistant turn).  Reappears at the correct
+      // position once the user scrolls up and the anchor message loads.
       return;
     }
     let anchorIdx=null;
@@ -5598,11 +5825,8 @@ function renderMessages(options){
     }
     if(anchorIdx===null){
       // personal: target rawIdx is past the rendered tail — anchor lives
-      // in an unloaded window above.  Skip instead of dropping at the
-      // bottom (which would falsely imply a fresh compression event after
-      // the last assistant turn).
-      if(fallbackPosition==='skip') return;
-      inner.appendChild(node);
+      // in an unloaded window above.  Skip silently for the same reason
+      // as the empty-window branch.
       return;
     }
     const anchorRawIdx=renderVisWithIdx[anchorIdx].rawIdx;
@@ -5636,15 +5860,13 @@ function renderMessages(options){
   const handoffSummaryStates=_collectHandoffSummaryStates(S.messages);
 
   _insertCompressionLikeNode(compressionNode);
-  // personal+upstream hybrid: prefer precise rawIdx anchoring (upstream
-  // 433ad29) but skip insertion entirely if the anchor is outside the
-  // currently-loaded render window (personal b454fd7) — instead of
-  // dropping the banner at the bottom where it would falsely imply a
-  // fresh compression event after the last assistant turn.  Reappears
-  // at the correct position once the user scrolls up and the anchor
-  // message loads.
-  if(referenceNode&&referenceMessageRawIdx>=0) _insertCompressionLikeNodeByRawIdx(referenceNode, referenceMessageRawIdx, 'skip');
-  else _insertCompressionLikeNode(referenceNode, undefined, 'skip');
+  // personal: skip protection for the rawIdx case lives inside
+  // _insertCompressionLikeNodeByRawIdx (returns silently when anchor is
+  // outside the loaded render window).  For the no-rawIdx fallback we
+  // keep upstream behavior (inner.appendChild) so the call site matches
+  // upstream verbatim — see test_reference_message_uses_raw_transcript_position.
+  if(referenceNode&&referenceMessageRawIdx>=0) _insertCompressionLikeNodeByRawIdx(referenceNode, referenceMessageRawIdx);
+  else _insertCompressionLikeNode(referenceNode);
   _insertCompressionLikeNode(preservedOnlyNode, preservedOnlyAnchor);
   _insertCompressionLikeNode(handoffState?_handoffCardsNode(handoffState):null, renderVisWithIdx.length?renderVisWithIdx.length-1:null);
   for(const entry of handoffSummaryStates){
@@ -5761,14 +5983,18 @@ function renderMessages(options){
         }
         if(!anchorRow) continue;
         const anchorParent=anchorRow.parentElement;
-        const insertAfterNode = anchorInsertAfter.get(anchorRow) || anchorRow;
+        let insertAfterNode = anchorInsertAfter.get(anchorRow) || anchorRow;
+        const thinkingText=assistantThinking.get(aIdx);
+        if(thinkingText){
+          const thinkingNode=_thinkingActivityNode(thinkingText, false);
+          anchorParent.insertBefore(thinkingNode, anchorRow);
+        }
+        if(!cards.length) continue;
         const group=ensureActivityGroup(anchorParent,{collapsed:true,anchor:insertAfterNode,activityKey:`assistant:${aIdx}`});
         const sourceMsg=S.messages[aIdx]||{};
         if(sourceMsg._turnDuration!==undefined) group.setAttribute('data-turn-duration', String(sourceMsg._turnDuration));
         const body=group&&group.querySelector('.tool-call-group-body');
         if(!body) continue;
-        const thinkingText=assistantThinking.get(aIdx);
-        if(thinkingText) body.appendChild(_thinkingActivityNode(thinkingText));
         for(const tc of cards){
           body.appendChild(buildToolCard(tc));
         }
@@ -5874,8 +6100,12 @@ function renderMessages(options){
         const inTok=msg._turnUsage.input_tokens||0;
         const outTok=msg._turnUsage.output_tokens||0;
         const cost=msg._turnUsage.estimated_cost;
+        const cacheRead=msg._turnUsage.cache_read_tokens||0;
+        const cacheWrite=msg._turnUsage.cache_write_tokens||0;
         let text=`${_fmtTokens(inTok)} in · ${_fmtTokens(outTok)} out`;
         if(cost) text+=` · ~$${cost<0.01?cost.toFixed(4):cost.toFixed(2)}`;
+        const cacheTotal=cacheRead+cacheWrite;
+        if(cacheTotal) text+=` · cache ${Math.round((cacheRead/cacheTotal)*100)}% hit`;
         usage.textContent=text;
         fragments.push(usage);
       }
@@ -6866,11 +7096,12 @@ function finalizeThinkingCard(){
     _syncToolCallGroupSummary(group);
   }
 }
-function appendThinking(text=''){
+function appendThinking(text='', options){
   // Guard: ignore if session was switched during an async SSE stream.
   // The old stream's reasoning events can still fire after switch;
   // without this check they would pollute the new session's DOM.
-  if(!S.session||!S.activeStreamId) return;
+  const allowPendingPlaceholder=!!(options&&options.pending===true);
+  if(!S.session||(!S.activeStreamId&&!allowPendingPlaceholder)) return;
   $('emptyState').style.display='none';
   let turn=$('liveAssistantTurn');
   if(!turn){
@@ -6913,31 +7144,25 @@ function appendThinking(text=''){
     }
     return;
   }
-  if(!String(text||'').trim()){
-    scrollIfPinned();
-    return;
-  }
-  const allChildren=Array.from(blocks.children);
-  const anchor=allChildren.filter(el=>
-    el.id!=='toolRunningRow' &&
-    el.matches('[data-live-assistant="1"],.tool-call-group,.tool-card-row,.agent-activity-thinking')
-  ).pop();
-  const group=ensureActivityGroup(blocks,{live:true,collapsed:true,anchor,activityKey:_activityKeyForLiveTurn()});
-  const body=group&&group.querySelector('.tool-call-group-body');
-  if(!body) return;
-  let row=body.querySelector('.agent-activity-thinking[data-thinking-active="1"]');
+  const thinkingText=String(text||'').trim()||'Thinking…';
+  let row=blocks.querySelector('.agent-activity-thinking[data-thinking-active="1"]');
   if(!row){
-    row=document.createElement('div');
-    row.className='agent-activity-thinking';
+    row=_thinkingActivityNode(thinkingText, false);
     row.setAttribute('data-thinking-active','1');
-    body.insertBefore(row, body.firstChild);
+    const allChildren=Array.from(blocks.children);
+    const anchor=allChildren.filter(el=>
+      el.id!=='toolRunningRow' &&
+      el.matches('[data-live-assistant="1"],.tool-call-group,.tool-card-row,.agent-activity-thinking')
+    ).pop();
+    if(anchor) anchor.insertAdjacentElement('afterend', row);
+    else blocks.appendChild(row);
+  }else{
+    _renderThinkingInto(row,thinkingText);
   }
-  _renderThinkingInto(row,text);
-  _syncToolCallGroupSummary(group);
   scrollIfPinned();
   if(_scrollPinned){
-    const thinkingBody=row&&row.querySelector('.thinking-card-body');
-    if(thinkingBody) thinkingBody.scrollTop=thinkingBody.scrollHeight;
+    const body=row&&row.querySelector('.thinking-card-body');
+    if(body) body.scrollTop=body.scrollHeight;
   }
 }
 function updateThinking(text=''){appendThinking(text);}

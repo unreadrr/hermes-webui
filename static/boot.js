@@ -101,7 +101,7 @@ function _setWorkspacePanelMode(mode){
   // Persist open/closed across refreshes (browse/preview → open; closed → closed)
   // Do NOT overwrite the user's "keep open" preference — only track runtime state
   // so that toggleWorkspacePanel(false) from the toolbar doesn't clear the setting.
-  localStorage.setItem('hermes-webui-workspace-panel', open ? 'open' : 'closed');
+  try{localStorage.setItem('hermes-webui-workspace-panel', open ? 'open' : 'closed');}catch(_){}
   layout.classList.toggle('workspace-panel-collapsed',!open);
   if(_isCompactWorkspaceViewport()){
     panel.classList.toggle('mobile-open',open);
@@ -1179,6 +1179,7 @@ const _SKINS=[
   {name:'Sisyphus', colors:['#A78BFA','#8B5CF6','#7C3AED']},
   {name:'Charizard',colors:['#FB923C','#F97316','#EA580C']},
   {name:'Sienna',   colors:['#D97757','#C06A49','#9A523A']},
+  {name:'Catppuccin',colors:['#CBA6F7','#B4BEFE','#8839EF']},
   {name:'Nous',     colors:['#4682B4','#3A6E9A','#2C5F88']},
 ];
 const _VALID_THEMES=new Set((_THEMES||[]).map(t=>t.value));
@@ -1387,6 +1388,7 @@ function applyBotName(){
     _bootSettings=s;
     window._sendKey=s.send_key||'enter';
     window._showTokenUsage=!!s.show_token_usage;
+    window._showQuotaChip=s.show_quota_chip===true;
     window._showTps=!!s.show_tps;
     window._fadeTextEffect=!!s.fade_text_effect;
     window._showCliSessions=!!s.show_cli_sessions;
@@ -1452,6 +1454,7 @@ function applyBotName(){
   }catch(e){
     window._sendKey='enter';
     window._showTokenUsage=false;
+    window._showQuotaChip=false;
     window._showTps=false;
     window._fadeTextEffect=false;
     window._showCliSessions=false;
@@ -1527,6 +1530,7 @@ function applyBotName(){
   const _srch = document.getElementById('sessionSearch'); if (_srch) _srch.value = '';
   // Initialize reasoning chip on boot (fixes #1103 — chip hidden until session load)
   if(typeof fetchReasoningChip==='function') fetchReasoningChip();
+  if(typeof refreshProviderQuotaIndicator==='function') refreshProviderQuotaIndicator();
   const urlSession=(typeof _sessionIdFromLocation==='function')?_sessionIdFromLocation():null;
   const savedLocal=localStorage.getItem('hermes-webui-session');
   const saved=urlSession||savedLocal;
