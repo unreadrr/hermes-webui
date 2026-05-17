@@ -347,6 +347,31 @@
     padding:10px 14px 0;
     gap:6px;
   }
+  /* Queue pill — when there are queued mid-stream messages, show as
+   * a rounded M3 pill instead of the legacy hard-cornered top-attached
+   * tab.  Matches the rest of the cream chip language. */
+  :root[data-skin="cream"] .queue-pill{
+    border-radius:18px;
+    border-bottom:1px solid var(--border);
+    margin-bottom:6px;
+    padding:8px 14px;
+    background:var(--accent-bg);
+    color:var(--accent-text);
+    border-color:var(--accent-bg-strong);
+    transition:background .15s,border-color .15s,transform .12s;
+  }
+  :root[data-skin="cream"] .queue-pill:hover{
+    background:var(--accent);
+    color:var(--bg);
+    transform:translateY(-1px);
+  }
+  :root[data-skin="cream"] .queue-card-inner{
+    border-radius:18px 18px 0 0;
+  }
+  /* Thinking card — keep accent-tinted but soften corners to match. */
+  :root[data-skin="cream"] .thinking-card{
+    border-radius:14px;
+  }
   :root[data-skin="cream"] .composer-box{border-radius:28px;padding:6px;}
   :root[data-skin="cream"] textarea#msg{padding:10px 14px 6px;}
   :root[data-skin="cream"] .composer-box:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--focus-glow),0 4px 16px rgba(62,44,28,0.10);}
