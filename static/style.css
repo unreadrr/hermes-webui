@@ -308,6 +308,45 @@
     display:flex;align-items:center;justify-content:center;
     flex-shrink:0;
   }
+  /* Tool card running — subtle shimmer top-bar in addition to the
+   * existing accent-bg fill, so live tools read instantly. */
+  :root[data-skin="cream"] .tool-card.tool-card-running{
+    border-radius:14px;
+    overflow:hidden;
+    position:relative;
+    box-shadow:0 0 0 1px var(--accent-bg-strong),0 2px 6px rgba(62,44,28,0.10);
+  }
+  :root[data-skin="cream"] .tool-card.tool-card-running::before{
+    content:'';
+    position:absolute; left:0; right:0; top:0;
+    height:2px;
+    background:linear-gradient(90deg,transparent 0%,var(--accent) 50%,transparent 100%);
+    background-size:200% 100%;
+    animation:cream-shimmer 1.6s ease-in-out infinite;
+    z-index:1;
+  }
+  @keyframes cream-shimmer{
+    0%{background-position:200% 0;}
+    100%{background-position:-200% 0;}
+  }
+  /* Code block refinement — softer radius, slightly wider padding. */
+  :root[data-skin="cream"] .msg-body pre{
+    border-radius:14px;
+    padding:14px 18px;
+    background:var(--code-bg);
+    border:1px solid var(--border);
+  }
+  :root[data-skin="cream"] .msg-body code{
+    border-radius:6px;
+    padding:1px 6px;
+    font-family:"JetBrains Mono","SF Mono",ui-monospace,monospace;
+  }
+  /* Composer attach-tray — when files are pinned, show them as M3
+   * attach pills above the textarea instead of squished in the corner. */
+  :root[data-skin="cream"] .attach-tray.has-files{
+    padding:10px 14px 0;
+    gap:6px;
+  }
   :root[data-skin="cream"] .composer-box{border-radius:28px;padding:6px;}
   :root[data-skin="cream"] textarea#msg{padding:10px 14px 6px;}
   :root[data-skin="cream"] .composer-box:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--focus-glow),0 4px 16px rgba(62,44,28,0.10);}
