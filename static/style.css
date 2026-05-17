@@ -244,6 +244,54 @@
     color:rgba(203,184,154,0.75);
     border-right-color:rgba(58,45,34,0.7);
   }
+  /* Cream-specific: warmer green/red for diff add/del rows so the
+   * red-green channels harmonize with the cream/mocha canvas instead
+   * of looking like generic GitHub channels dropped on top of warm
+   * palette.  Slightly desaturated and pulled toward warm-axis. */
+  :root[data-skin="cream"] .tool-card-result .tool-diff .diff-add td{
+    background:rgba(120,160,90,0.16);
+  }
+  :root[data-skin="cream"] .tool-card-result .tool-diff .diff-add .diff-num{
+    background:rgba(120,160,90,0.26);
+    color:rgba(70,98,42,0.9);
+  }
+  :root[data-skin="cream"] .tool-card-result .tool-diff .diff-add .diff-content,
+  :root[data-skin="cream"] .tool-card-result .tool-diff .diff-add .diff-marker{
+    color:rgba(70,98,42,0.95);
+  }
+  :root[data-skin="cream"] .tool-card-result .tool-diff .diff-del td{
+    background:rgba(178,80,55,0.14);
+  }
+  :root[data-skin="cream"] .tool-card-result .tool-diff .diff-del .diff-num{
+    background:rgba(178,80,55,0.22);
+    color:rgba(140,53,32,0.9);
+  }
+  :root[data-skin="cream"] .tool-card-result .tool-diff .diff-del .diff-content,
+  :root[data-skin="cream"] .tool-card-result .tool-diff .diff-del .diff-marker{
+    color:rgba(140,53,32,0.95);
+  }
+  :root.dark[data-skin="cream"] .tool-card-result .tool-diff .diff-add td{
+    background:rgba(170,210,140,0.10);
+  }
+  :root.dark[data-skin="cream"] .tool-card-result .tool-diff .diff-add .diff-num{
+    background:rgba(170,210,140,0.18);
+    color:rgba(190,225,160,0.85);
+  }
+  :root.dark[data-skin="cream"] .tool-card-result .tool-diff .diff-add .diff-content,
+  :root.dark[data-skin="cream"] .tool-card-result .tool-diff .diff-add .diff-marker{
+    color:rgba(190,225,160,0.95);
+  }
+  :root.dark[data-skin="cream"] .tool-card-result .tool-diff .diff-del td{
+    background:rgba(220,130,100,0.12);
+  }
+  :root.dark[data-skin="cream"] .tool-card-result .tool-diff .diff-del .diff-num{
+    background:rgba(220,130,100,0.20);
+    color:rgba(245,180,150,0.85);
+  }
+  :root.dark[data-skin="cream"] .tool-card-result .tool-diff .diff-del .diff-content,
+  :root.dark[data-skin="cream"] .tool-card-result .tool-diff .diff-del .diff-marker{
+    color:rgba(245,180,150,0.95);
+  }
 
   /* ── Skin: Catppuccin (Latte light / Mocha dark) ──
      Full palette rewrite using the Catppuccin mauve accent. Light mode maps
