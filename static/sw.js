@@ -30,8 +30,9 @@
 //  M3 sidebar search pill +
 //  M3 date group headers +
 //  M3 approval card + queue card softer corners +
-//  M3 send-FAB 40x40 with proper elevation) — bump.
-const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-send-fab';
+//  M3 send-FAB 40x40 with proper elevation +
+//  M3 nav rail with filled active pill) — bump.
+const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-rail-pill';
 
 // Static assets that form the app shell.
 //

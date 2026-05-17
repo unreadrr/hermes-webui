@@ -459,6 +459,37 @@
   :root[data-skin="cream"] .queue-card-inner{
     border-radius:18px 18px 0 0;
   }
+  /* M3 primary navigation rail — softer active pill, smoother hover */
+  :root[data-skin="cream"] .rail{
+    background:var(--surface);
+    padding:10px 0;
+    gap:6px;
+  }
+  :root[data-skin="cream"] .rail-btn{
+    width:40px;
+    height:40px;
+    border-radius:12px;
+    transition:background .18s,color .15s,transform .12s;
+  }
+  :root[data-skin="cream"] .rail-btn:hover{
+    background:var(--accent-bg);
+    color:var(--accent-text);
+  }
+  :root[data-skin="cream"] .rail-btn:active{
+    transform:scale(.92);
+    transition-duration:.06s;
+  }
+  :root[data-skin="cream"] .rail-btn.active{
+    background:var(--accent);
+    color:var(--bg);
+  }
+  :root[data-skin="cream"] .rail-btn.active::before{
+    width:0;
+  }
+  :root.dark[data-skin="cream"] .rail-btn.active{
+    background:var(--accent);
+    color:var(--bg);
+  }
   /* Queue pill — when there are queued mid-stream messages, show as
    * a rounded M3 pill instead of the legacy hard-cornered top-attached
    * tab.  Matches the rest of the cream chip language. */
