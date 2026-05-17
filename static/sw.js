@@ -25,8 +25,9 @@
 //  inject-pill DOM-only (preserve live tool cards mid-stream) +
 //  composer footer chips unified +
 //  drop "Вы" badge on inject-pill +
-//  inject/steer pills accumulate (don't replace prior)) — bump.
-const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-pill-history';
+//  inject/steer pills accumulate (don't replace prior) +
+//  freeze live turn before pill (correct chronological order)) — bump.
+const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-pill-order';
 
 // Static assets that form the app shell.
 //

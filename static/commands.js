@@ -881,6 +881,18 @@ async function cmdSteer(args){
 function _showSteerIndicator(text){
   const inner=document.getElementById('msgInner');
   if(!inner) return;
+  // personal: same chronological-order fix as inject-pill — freeze
+  // the current live-assistant turn so the steer pill lands AFTER
+  // it instead of having streaming continue above the pill.
+  try{
+    const liveTurn=document.getElementById('liveAssistantTurn');
+    if(liveTurn){
+      liveTurn.removeAttribute('id');
+      liveTurn.querySelectorAll('[data-live-assistant="1"]').forEach(seg=>{
+        seg.removeAttribute('data-live-assistant');
+      });
+    }
+  }catch(_){}
   // personal: APPEND, don't replace.  Multiple steers in one turn
   // should each leave their own indicator so the operator sees the
   // history of what they tried to nudge with.
@@ -901,6 +913,24 @@ function _showSteerIndicator(text){
 function _showInjectIndicator(text){
   const inner=document.getElementById('msgInner');
   if(!inner) return;
+  // personal: before appending the pill, "freeze" the currently-streaming
+  // assistant turn by stripping its #liveAssistantTurn id and the
+  // data-live-assistant marker on its inner segment.  Next streaming
+  // token won't find liveAssistantTurn and will create a NEW turn
+  // appended AFTER the pill — preserving correct chronological order
+  // (..frozen-partial-assistant, [user pill], [continuing assistant]).
+  // Without this, the streaming code keeps appending into the old
+  // turn which still sits above the pill, so the user sees their
+  // message appear ABOVE the assistant's continuing reply.
+  try{
+    const liveTurn=document.getElementById('liveAssistantTurn');
+    if(liveTurn){
+      liveTurn.removeAttribute('id');
+      liveTurn.querySelectorAll('[data-live-assistant="1"]').forEach(seg=>{
+        seg.removeAttribute('data-live-assistant');
+      });
+    }
+  }catch(_){}
   // personal: APPEND, don't replace.  Each mid-stream send leaves its
   // own pill so the operator can see they sent multiple messages.
   // The backend journals every inject; on 'done' the full history
