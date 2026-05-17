@@ -267,7 +267,10 @@
     background:var(--accent);
     border-radius:3px;
   }
-  :root[data-skin="cream"] .session-item{position:relative;border-radius:12px;margin:0 4px;}
+  :root[data-skin="cream"] .session-item{position:relative;border-radius:12px;margin:0 4px;padding:10px 12px;transition:background .15s,color .15s;}
+  :root[data-skin="cream"] .session-item:hover:not(.active){background:var(--surface-2,var(--surface-subtle,rgba(62,44,28,0.05)));}
+  :root[data-skin="cream"] .session-item .session-title{font-weight:500;letter-spacing:-.005em;}
+  :root[data-skin="cream"] .session-item .session-meta{font-size:11px;opacity:.75;}
   /* Assistant H avatar — M3 rounded square with primary fill, matches mockup. */
   :root[data-skin="cream"] .role-icon.assistant{
     width:30px; height:30px;
