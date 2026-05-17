@@ -49,8 +49,9 @@
 //  M3 wide rail with text labels (80px) +
 //  M3 composer footer compaction + ctx indicator polish +
 //  M3 cream Prism syntax tokens +
-//  M3 composer pill — flattened layout) — bump.
-const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-m3-rewrite-18';
+//  M3 composer pill v2 — display:contents flatten +
+//  M3 composer hairline divider between chip track and input row) — bump.
+const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-m3-rewrite-20';
 
 // Static assets that form the app shell.
 //

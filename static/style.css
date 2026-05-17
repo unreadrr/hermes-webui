@@ -1164,6 +1164,22 @@
   :root[data-skin="cream"] .composer-box #btnSend,
   :root[data-skin="cream"] .composer-box .send-btn,
   :root[data-skin="cream"] .composer-box .cancel-btn{order:20;}
+  /* Hairline divider between chip track and input row inside the pill */
+  :root[data-skin="cream"] .composer-box::before{
+    content:'';
+    order:9;
+    flex:1 1 100%;
+    height:1px;
+    margin:2px -2px 4px;
+    background:var(--border-subtle,var(--border));
+    opacity:.6;
+  }
+  /* Quiet the chip track items so they read as secondary track */
+  :root[data-skin="cream"] .composer-box #yoloPill,
+  :root[data-skin="cream"] .composer-box #profileChipWrap,
+  :root[data-skin="cream"] .composer-box .composer-toolsets-pill{
+    font-size:11px;
+  }
   /* Make textarea flex-basis:100% force the chips to wrap above it
    * (since flex-wrap is enabled on composer-box) */
   /* Composer focus halo on the whole pill */
