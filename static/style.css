@@ -1036,7 +1036,13 @@
   .topbar-title{font-size:15px;font-weight:600;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .topbar-meta{font-size:11px;color:var(--muted);margin-top:3px;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .topbar-chips{display:flex;gap:6px;align-items:center;flex-shrink:0;}
-  .chip{font-size:11px;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,0.05);border:1px solid var(--border2);color:var(--muted);font-weight:500;}
+  .chip{font-size:11px;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,0.05);border:1px solid var(--border2);color:var(--muted);font-weight:500;transition:background .15s,border-color .15s,color .15s,transform .12s;}
+  /* Interactive chips (buttons inside topbar-chips, ws-chip) get
+   * hover/press feedback consistent with the send-btn / tool-card pass. */
+  .topbar-chips button.chip:hover:not(:disabled),
+  button.ws-chip:hover:not(:disabled){background:var(--hover-bg,rgba(255,255,255,0.08));border-color:var(--border);color:var(--text);transform:translateY(-1px);}
+  .topbar-chips button.chip:active:not(:disabled),
+  button.ws-chip:active:not(:disabled){transform:translateY(0) scale(.96);transition-duration:.06s;}
   .workspace-toggle-btn{display:inline-flex!important;align-items:center;gap:6px;cursor:pointer;}
   .workspace-toggle-btn.active{color:var(--accent-text);border-color:var(--accent-bg);background:var(--accent-bg);}
   .workspace-toggle-btn:disabled{opacity:.38;cursor:not-allowed;}

@@ -12,8 +12,9 @@
 //  partial_tool_calls preserved on cancel reload + dual-channel additive
 //  interrupt frontend + smart tool detail renderer w/ github-style diff +
 //  cream skin + micro-animations + composer focus-glow + dot-wave +
-//  message slide-in + cream-specific diff colors + send-btn transitions) — bump.
-const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-final';
+//  message slide-in + cream-specific diff colors + send-btn transitions +
+//  topbar chip hover/press) — bump.
+const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-final-2';
 
 // Static assets that form the app shell.
 //
