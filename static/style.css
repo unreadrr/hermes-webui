@@ -237,7 +237,43 @@
   :root[data-skin="cream"] .msg-row[data-role="user"] .msg-body code{color:var(--user-bubble-text);background:rgba(62,44,28,0.08);}
   :root[data-skin="cream"] button.send-btn {box-shadow:0 1px 3px rgba(111,78,55,0.32);}
   :root[data-skin="cream"] button.send-btn:hover {box-shadow:0 2px 10px rgba(111,78,55,0.50);}
-  :root[data-skin="cream"] .session-item.active{border-left:2px solid var(--accent);}
+  :root[data-skin="cream"] .session-item.active{
+    border-left:0;
+    background:var(--accent-bg);
+    border-radius:14px;
+    margin:1px 4px;
+    padding-left:14px;
+  }
+  :root[data-skin="cream"] .session-item.active::before{
+    content:'';
+    position:absolute;
+    left:4px; top:50%;
+    width:4px; height:18px;
+    margin-top:-9px;
+    background:var(--accent);
+    border-radius:3px;
+  }
+  :root[data-skin="cream"] .session-item{position:relative;border-radius:12px;margin:0 4px;}
+  /* Assistant H avatar — M3 rounded square with primary fill, matches mockup. */
+  :root[data-skin="cream"] .role-icon.assistant{
+    width:30px; height:30px;
+    border-radius:10px;
+    font-size:13px;
+    font-weight:700;
+    background:var(--accent);
+    color:var(--bg);
+    border:0;
+    box-shadow:0 1px 2px rgba(62,44,28,0.18);
+  }
+  :root.dark[data-skin="cream"] .role-icon.assistant{
+    box-shadow:0 1px 2px rgba(0,0,0,0.40);
+  }
+  :root[data-skin="cream"] .role-icon.user{
+    width:30px; height:30px;
+    border-radius:10px;
+    font-size:13px;
+    font-weight:600;
+  }
   :root[data-skin="cream"] .composer-box{border-radius:28px;padding:6px;}
   :root[data-skin="cream"] textarea#msg{padding:10px 14px 6px;}
   :root[data-skin="cream"] .composer-box:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--focus-glow),0 4px 16px rgba(62,44,28,0.10);}
@@ -259,13 +295,14 @@
   :root.dark[data-skin="cream"] .tool-card:hover{box-shadow:0 2px 6px rgba(0,0,0,0.40);}
   /* M3 message actions — always faintly visible, full opacity on hover.
    * Operator complaint: clean look, but copy/retry/fork buttons should be
-   * discoverable without hovering each row.  Mockup approach: opacity .55
-   * baseline, .95 on hover.  Cream skin only — default keeps invisible-until-hover. */
-  :root[data-skin="cream"] .msg-actions{opacity:.55;transition:opacity .18s;}
+   * discoverable without hovering each row.  Mockup approach: opacity .7
+   * baseline (was .55 — too dim against dark cream surface), 1.0 on hover.
+   * Cream skin only — default keeps invisible-until-hover. */
+  :root[data-skin="cream"] .msg-actions{opacity:.7 !important;transition:opacity .18s;}
   :root[data-skin="cream"] .msg-row:hover .msg-actions,
   :root[data-skin="cream"] .msg-row:focus-within .msg-actions,
   :root[data-skin="cream"] .assistant-turn:hover .msg-actions,
-  :root[data-skin="cream"] .assistant-turn:focus-within .msg-actions{opacity:.95;}
+  :root[data-skin="cream"] .assistant-turn:focus-within .msg-actions{opacity:1 !important;}
   /* Activity pill — pill shape with accent dot, matches mockup */
   :root[data-skin="cream"] .tool-call-group-summary{
     background:var(--surface-subtle,rgba(62,44,28,0.025));
