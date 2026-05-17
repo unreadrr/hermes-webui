@@ -23,8 +23,9 @@
 //  queue pill rounded + thinking card softer corners +
 //  markdown typography polish +
 //  inject-pill DOM-only (preserve live tool cards mid-stream) +
-//  composer footer chips unified) — bump.
-const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-composer-chips';
+//  composer footer chips unified +
+//  drop "Вы" badge on inject-pill) — bump.
+const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-no-vy-badge';
 
 // Static assets that form the app shell.
 //

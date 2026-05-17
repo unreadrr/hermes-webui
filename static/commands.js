@@ -906,13 +906,9 @@ function _showInjectIndicator(text){
   if(old) old.remove();
   const el=document.createElement('div');
   el.className='inject-indicator';
-  const badge=document.createElement('span');
-  badge.className='inject-badge';
-  badge.textContent='Вы';
   const body=document.createElement('span');
   body.className='inject-body';
   body.textContent=text.length>240?text.slice(0,237)+'…':text;
-  el.appendChild(badge);
   el.appendChild(body);
   inner.appendChild(el);
   if(typeof scrollToBottom==='function') scrollToBottom();
