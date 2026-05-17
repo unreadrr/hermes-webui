@@ -2109,7 +2109,12 @@ body.resizing .sidebar{transition:none!important;}
 .tool-card-toggle{font-size:10px;color:var(--muted);opacity:.45;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;transform-origin:center;transition:transform .18s ease;will-change:transform;}
 .tool-card.open .tool-card-toggle{transform:rotate(90deg);}
 .tool-card-detail{display:block;max-height:0;opacity:0;overflow:hidden;border-top:1px solid transparent;padding:0 var(--space-3);transition:max-height .22s ease,opacity .18s ease,padding .22s ease,border-top-color .22s ease;}
-.tool-card.open .tool-card-detail{max-height:600px;opacity:1;padding:var(--space-2) var(--space-3);border-top-color:var(--border-subtle);overflow:auto;}
+/* personal: raise expanded tool-card cap so long terminal/read outputs
+ * are scrollable instead of clipped at 600px.  60vh is roughly
+ * "two-thirds of the chat" — comfortable to read without taking over
+ * the whole viewport.  Inner pre still scrolls independently.  Pattern
+ * adapted from ui-research/devin-node/web/src/m3/organisms/ChatStream.tsx. */
+.tool-card.open .tool-card-detail{max-height:60vh;opacity:1;padding:var(--space-2) var(--space-3);border-top-color:var(--border-subtle);overflow:auto;overscroll-behavior:contain;}
 .tool-card-args{margin-bottom:6px;}
 .tool-card-args div{font-size:var(--font-size-xs);line-height:1.6;}
 .tool-arg-key{color:var(--blue);font-family:'SF Mono',ui-monospace,monospace;font-size:var(--font-size-xs);display:block;margin-bottom:2px;}

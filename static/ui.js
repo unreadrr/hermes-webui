@@ -6221,11 +6221,124 @@ function renderMessages(options){
   }
 }
 
+// personal: human-friendly tool labels with arg-aware preview lines.
+// Pattern adapted from ui-research/openhands/frontend/src/components/v1/chat/
+// event-content-helpers/get-event-content.tsx — switch on tool name, pull
+// the most-informative arg, trim it.  Keeps the technical tool name out of
+// chat (matches Devin / Claude Code / Cursor convention).
+function _trimArgPreview(s, max){
+  const t=String(s||'').replace(/\s+/g,' ').trim();
+  if(!t) return '';
+  return t.length<=max?t:t.slice(0,max-1)+'…';
+}
 function _toolDisplayName(tc){
-  const name=(tc&&tc.name)||'tool';
+  const name=String((tc&&tc.name)||'tool');
+  const args=(tc&&tc.args)||{};
+  // Subagent progress messages already carry their own preview text — keep
+  // the existing «Subagent» label so the live progress arrow renders nicely.
   if(name==='subagent_progress') return 'Subagent';
-  if(name==='delegate_task') return 'Delegate task';
-  return name;
+  switch(name){
+    case 'terminal':{
+      const cmd=_trimArgPreview(args.command,80);
+      return cmd?`Запуск ${cmd}`:'Запуск команды';
+    }
+    case 'read_file':{
+      const p=_trimArgPreview(args.path||args.file_path,60);
+      return p?`Чтение ${p}`:'Чтение файла';
+    }
+    case 'write_file':{
+      const p=_trimArgPreview(args.path||args.file_path,60);
+      return p?`Запись ${p}`:'Запись файла';
+    }
+    case 'patch':{
+      const p=_trimArgPreview(args.path||args.file_path,60);
+      return p?`Правка ${p}`:'Правка файла';
+    }
+    case 'search_files':{
+      const q=_trimArgPreview(args.pattern||args.query,50);
+      const target=args.target==='files'?'файлов':'';
+      if(q&&target) return `Поиск ${target}: ${q}`;
+      if(q) return `Поиск: ${q}`;
+      return target?`Поиск ${target}`:'Поиск';
+    }
+    case 'web_search':{
+      const q=_trimArgPreview(args.query,60);
+      return q?`Поиск в вебе: ${q}`:'Поиск в вебе';
+    }
+    case 'web_extract':
+    case 'browser_navigate':{
+      const u=_trimArgPreview(args.url||args.urls,70);
+      return u?`Открыть ${u}`:'Открыть URL';
+    }
+    case 'execute_code':
+      return 'Python: исполнение';
+    case 'memory':{
+      const action=args.action||'';
+      if(action==='add') return 'Сохранить в память';
+      if(action==='replace') return 'Обновить память';
+      if(action==='remove') return 'Удалить из памяти';
+      return 'Память';
+    }
+    case 'skill_manage':{
+      const action=args.action||'';
+      const n=_trimArgPreview(args.name,40);
+      const verb={create:'Создать скилл',patch:'Патч скилла',edit:'Правка скилла',delete:'Удалить скилл'}[action]||'Скилл';
+      return n?`${verb}: ${n}`:verb;
+    }
+    case 'skill_view':{
+      const n=_trimArgPreview(args.name,40);
+      return n?`Скилл: ${n}`:'Скилл';
+    }
+    case 'skills_list':
+      return 'Список скиллов';
+    case 'todo':
+      return Array.isArray(args.todos)&&args.todos.length?'Обновить задачи':'Задачи';
+    case 'cronjob':{
+      const action=args.action||'';
+      const verb={create:'Создать cron',list:'Список cron',update:'Изменить cron',pause:'Пауза cron',resume:'Возобновить cron',remove:'Удалить cron',run:'Запустить cron'}[action];
+      return verb||'Cron';
+    }
+    case 'delegate_task':{
+      const goal=_trimArgPreview(args.goal,60);
+      return goal?`Делегировать: ${goal}`:'Делегировать';
+    }
+    case 'send_message':{
+      const target=_trimArgPreview(args.target,30);
+      return target?`Сообщение → ${target}`:'Отправить сообщение';
+    }
+    case 'vision_analyze':
+      return 'Смотрю изображение';
+    case 'image_generate':{
+      const p=_trimArgPreview(args.prompt,50);
+      return p?`Генерация: ${p}`:'Генерация изображения';
+    }
+    case 'text_to_speech':
+      return 'Озвучить';
+    case 'session_search':{
+      const q=_trimArgPreview(args.query,50);
+      return q?`В прошлых сессиях: ${q}`:'Прошлые сессии';
+    }
+    case 'web_search_news':
+    case 'news_search':
+      return 'Поиск в новостях';
+    case 'process':{
+      const action=args.action||'';
+      const verb={list:'Процессы',poll:'Статус процесса',log:'Лог процесса',wait:'Ждать процесс',kill:'Убить процесс',write:'В stdin',submit:'Submit в stdin',close:'Закрыть stdin'}[action];
+      return verb||'Процесс';
+    }
+    case 'clarify':
+      return 'Уточнение у пользователя';
+  }
+  // MCP tool names are usually `mcp_<server>_<action>` — surface the action
+  // in a friendly way without losing the namespace.
+  const mcpMatch=name.match(/^mcp_([^_]+)_(.+)$/);
+  if(mcpMatch){
+    const server=mcpMatch[1];
+    const action=mcpMatch[2].replace(/_/g,' ');
+    return `MCP ${server}: ${action}`;
+  }
+  // Fallback: cleaned-up tool name.
+  return name.replace(/_/g,' ');
 }
 function toolIcon(name){
   const icons={
