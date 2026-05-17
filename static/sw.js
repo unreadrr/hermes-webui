@@ -38,8 +38,9 @@
 //  M3 tool-card surfaces in Activity body + composer textarea polish +
 //  M3 session-item hover + meta polish +
 //  M3 topbar polish + composer-wrap padding +
-//  M3 thinking card + attach-tray pills) — bump.
-const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-m3-rewrite-7';
+//  M3 thinking card + attach-tray pills +
+//  M3 sidebar header + msg actions + links polish) — bump.
+const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-m3-rewrite-8';
 
 // Static assets that form the app shell.
 //

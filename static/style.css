@@ -708,6 +708,47 @@
     border:1px solid var(--border);
     font-size:12px;
   }
+  /* Sidebar header — M3 title row */
+  :root[data-skin="cream"] .sidebar-header{
+    padding:18px 18px 12px;
+    border-bottom:0;
+    gap:10px;
+  }
+  :root[data-skin="cream"] .sidebar-header h1{
+    font-size:20px;
+    font-weight:700;
+    letter-spacing:-.01em;
+  }
+  /* Message action buttons — softer hover with surface-2 instead of accent-bg */
+  :root[data-skin="cream"] .msg-action-btn{
+    border-radius:8px;
+    padding:4px 7px;
+    transition:color .12s,background .12s,transform .12s;
+  }
+  :root[data-skin="cream"] .msg-action-btn:hover{
+    color:var(--accent);
+    background:var(--surface-2,var(--surface-subtle,rgba(62,44,28,0.06)));
+    transform:none;
+  }
+  /* Links inside assistant body — M3 accent with subtle underline-on-hover */
+  :root[data-skin="cream"] .msg-row[data-role="assistant"] .msg-body a{
+    color:var(--accent);
+    text-decoration:none;
+    border-bottom:1px solid transparent;
+    transition:border-color .15s;
+  }
+  :root[data-skin="cream"] .msg-row[data-role="assistant"] .msg-body a:hover{
+    border-bottom-color:var(--accent);
+  }
+  /* Timestamp footers — quieter, smaller */
+  :root[data-skin="cream"] .msg-foot{
+    font-size:11px;
+    opacity:.6;
+    margin-top:6px;
+  }
+  :root[data-skin="cream"] .msg-foot:hover{
+    opacity:.85;
+  }
   /* M3 typography scale inside assistant body — display/headline/title/body. */
   :root[data-skin="cream"] .msg-row[data-role="assistant"] .msg-body h1{
     font-size:22px;
