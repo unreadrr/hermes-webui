@@ -23,6 +23,7 @@ from api.config import (
     get_config,
     STREAMS, STREAMS_LOCK, CANCEL_FLAGS, AGENT_INSTANCES, STREAM_PARTIAL_TEXT,
     STREAM_REASONING_TEXT, STREAM_LIVE_TOOL_CALLS,
+    STREAM_INJECTED_MESSAGES,
     STREAM_GOAL_RELATED, PENDING_GOAL_CONTINUATION,
     STREAM_LAST_EVENT_ID,
     LOCK, SESSIONS, SESSION_DIR,
@@ -3922,6 +3923,13 @@ def _run_agent_streaming(
                     _restore_reasoning_metadata(_previous_messages, _result_messages),
                     msg_text,
                 )
+                # personal: flush dual-channel injected user messages —
+                # see _flush_injected_messages_into_session docstring.
+                # Must run AFTER merge so any injection that didn't make
+                # it into the agent's result history (e.g. arrived after
+                # the agent's last tool-result boundary) lands in the
+                # transcript before save.
+                _flush_injected_messages_into_session(s, stream_id)
                 # Strip XML tool-call blocks from assistant message content.
                 # DeepSeek and some other providers emit <function_calls>...</function_calls>
                 # in the raw response text; this must be removed before the content is
@@ -4062,6 +4070,10 @@ def _run_agent_streaming(
                                     _restore_reasoning_metadata(_previous_messages, _result_messages),
                                     msg_text,
                                 )
+                                # personal: flush dual-channel injected user
+                                # messages after merge — same rationale as the
+                                # primary merge call site above.
+                                _flush_injected_messages_into_session(s, stream_id)
                                 # Skip the error block — jump directly to the
                                 # normal post-result persistence path by
                                 # leaving _assistant_added truthy (set below).
@@ -4844,6 +4856,10 @@ def _run_agent_streaming(
                                     _restore_reasoning_metadata(_previous_messages, _result_messages),
                                     msg_text,
                                 )
+                                # personal: flush dual-channel injected user
+                                # messages on the self-heal (except path) so
+                                # injection survives a retry-after-error.
+                                _flush_injected_messages_into_session(s, stream_id)
                                 s.save()
                         logger.info('[webui] self-heal (except path): retry succeeded')
                         return  # skip error emission
@@ -4943,6 +4959,13 @@ def _run_agent_streaming(
             STREAM_PARTIAL_TEXT.pop(stream_id, None)  # Clean up partial text buffer (#893)
             STREAM_REASONING_TEXT.pop(stream_id, None)  # Clean up reasoning trace (#1361 §A)
             STREAM_LIVE_TOOL_CALLS.pop(stream_id, None)  # Clean up tool calls (#1361 §B)
+            # personal: dual-channel additive interrupt — clean up any
+            # injected message bucket that wasn't flushed by the merge/cancel
+            # paths above.  In the normal flow _flush_injected_messages_into_session
+            # already pops the bucket; this is the defensive last-resort
+            # cleanup to prevent a memory leak if the worker exits via an
+            # unexpected path (uncaught exception, OOM kill, etc.).
+            STREAM_INJECTED_MESSAGES.pop(stream_id, None)
             STREAM_GOAL_RELATED.pop(stream_id, None)  # Clean up goal-related flag (#1932)
             STREAM_LAST_EVENT_ID.pop(stream_id, None)  # Clean up event_id pointer (stage-364)
             unregister_active_run(stream_id)
@@ -4962,6 +4985,204 @@ def _run_agent_streaming(
 # do_POST: mutating endpoints (session CRUD, chat, upload, approval)
 # Routing is a flat if/elif chain. See ARCHITECTURE.md section 4.1.
 # ============================================================
+
+
+def _flush_injected_messages_into_session(s, stream_id: str | None) -> int:
+    """Pop STREAM_INJECTED_MESSAGES[stream_id] and append entries to s.messages.
+
+    personal: dual-channel additive interrupt — flush hook.
+
+    Called by the streaming worker's done/error/cancel paths AFTER the
+    normal merge has settled s.messages.  This is the moment when the
+    journal channel becomes durable: any user msg that arrived via
+    /api/chat/inject during the run is now appended at the end of the
+    transcript, so it survives subsequent saves and any steer that landed
+    inside the agent's result history is not double-counted (the merge
+    already strips _injected duplicates by content+role identity).
+
+    Returns the number of messages flushed (0 if no injection).
+    """
+    if not stream_id:
+        return 0
+    from api import config as _live_config
+    primary = STREAM_INJECTED_MESSAGES
+    live = getattr(_live_config, "STREAM_INJECTED_MESSAGES", primary)
+    bucket = None
+    with STREAMS_LOCK:
+        bucket = primary.pop(stream_id, None)
+        if bucket is None and live is not primary:
+            bucket = live.pop(stream_id, None)
+    if not bucket:
+        return 0
+    if not isinstance(getattr(s, "messages", None), list):
+        s.messages = []
+    flushed = 0
+    for msg in bucket:
+        if not isinstance(msg, dict):
+            continue
+        # De-dup against an existing user turn with identical text — the
+        # agent's result history already echoes the injection if steer
+        # delivered (rare on a normal turn finish, common on tool-boundary
+        # finish).  _message_identity compares (role, content) so any
+        # identity-equivalent message is treated as already-merged.
+        key = _message_identity(msg)
+        already_present = False
+        if key is not None:
+            for existing in reversed(s.messages):
+                if _message_identity(existing) == key:
+                    already_present = True
+                    break
+        if already_present:
+            continue
+        s.messages.append(copy.deepcopy(msg))
+        flushed += 1
+    return flushed
+
+
+def _handle_chat_inject(handler, body: dict) -> bool:
+    """Inject a user message mid-run without interrupting the active turn.
+
+    personal: dual-channel additive interrupt (Devin-style).
+
+    Channel 1 (visible journal):
+      Saves the message into STREAM_INJECTED_MESSAGES[stream_id] so the
+      streaming worker's done/cancel path can append it to s.messages
+      AFTER _merge_display_messages_after_agent_result runs.  Without this
+      the agent's normal merge would clobber any direct s.messages append
+      because the merge rebuilds from agent.messages (which doesn't know
+      about the user's mid-run input).
+
+    Channel 2 (best-effort steer):
+      Calls agent.steer(text) so the LLM sees the message at the next
+      tool-result boundary.  Falls through silently if no agent is cached
+      (newer-than-0.50.50 agents only) or if the agent is blocked in a
+      long-running tool — the journal channel still fires so the message
+      is visible in the UI immediately and persisted on the next merge.
+
+    UI broadcast:
+      Pushes a 'user_journaled' SSE event onto the stream queue so the
+      frontend (and any other tab viewing the same session) renders the
+      message inline immediately.  Frontend doesn't have to wait for
+      done/cancel to see its own message in the transcript.
+
+    Returns 200 with {accepted: bool, channels: {journal, steer},
+                       stream_id, position}.
+    Frontend interprets `journal=true` as 'message will not be lost
+    even if the agent terminates abruptly'.
+
+    Body: {session_id, text, attachments?: list[str]}
+    """
+    from api.helpers import j, bad
+    from api import config as _cfg
+
+    sid = str((body or {}).get("session_id", "") or "").strip()
+    text = str((body or {}).get("text", "") or "").strip()
+    attachments_raw = (body or {}).get("attachments") or []
+    attachments = [a for a in attachments_raw if isinstance(a, str)] if isinstance(attachments_raw, list) else []
+    if not sid:
+        return bad(handler, "session_id required")
+    if not text:
+        return bad(handler, "text required")
+
+    # Resolve active stream for this session so we know where to journal.
+    try:
+        s = get_session(sid)
+    except KeyError:
+        return j(handler, {
+            "accepted": False,
+            "channels": {"journal": False, "steer": False},
+            "fallback": "session_not_found",
+            "stream_id": None,
+        })
+    active_stream_id = getattr(s, "active_stream_id", None) or None
+    if not active_stream_id:
+        # Nothing is running — caller should fall back to a normal /api/chat/start.
+        return j(handler, {
+            "accepted": False,
+            "channels": {"journal": False, "steer": False},
+            "fallback": "not_running",
+            "stream_id": None,
+        })
+    with _cfg.STREAMS_LOCK:
+        stream_alive = active_stream_id in _cfg.STREAMS
+        stream_q = _cfg.STREAMS.get(active_stream_id)
+    if not stream_alive:
+        return j(handler, {
+            "accepted": False,
+            "channels": {"journal": False, "steer": False},
+            "fallback": "stream_dead",
+            "stream_id": None,
+        })
+
+    # ── Channel 1: journal ───────────────────────────────────────────────
+    # Build the user message in the same shape merge expects so it lines up
+    # with whatever the agent's result history looks like.  Stamp _injected
+    # so renderers / tests can distinguish from regular user turns.
+    user_msg = {
+        "role": "user",
+        "content": text,
+        "timestamp": int(time.time()),
+        "_injected": True,
+        "_injected_stream_id": active_stream_id,
+    }
+    if attachments:
+        user_msg["attachments"] = list(attachments)
+
+    with _cfg.STREAMS_LOCK:
+        bucket = _cfg.STREAM_INJECTED_MESSAGES.setdefault(active_stream_id, [])
+        bucket.append(user_msg)
+        position = len(bucket)
+
+    journal_ok = True
+
+    # Broadcast SSE so live UI renders the message immediately.  The
+    # frontend uses the same {role:'user', content:...} shape as a regular
+    # message so renderMessages can drop it into the transcript without a
+    # special path.
+    sse_ok = False
+    if stream_q is not None:
+        try:
+            stream_q.put_nowait(("user_journaled", {
+                "stream_id": active_stream_id,
+                "message": user_msg,
+                "position": position,
+            }))
+            sse_ok = True
+        except Exception:
+            logger.debug("Failed to put user_journaled event for stream %s", active_stream_id, exc_info=True)
+
+    # ── Channel 2: best-effort steer ─────────────────────────────────────
+    # If the cached agent supports steer(), inject so the LLM sees the
+    # message at its next tool-result boundary.  Failures here are non-fatal
+    # because Channel 1 (journal) is the source of truth.
+    steer_ok = False
+    steer_fallback = None
+    with _cfg.SESSION_AGENT_CACHE_LOCK:
+        cached = _cfg.SESSION_AGENT_CACHE.get(sid)
+    if not cached:
+        steer_fallback = "no_cached_agent"
+    else:
+        agent = cached[0]
+        if not hasattr(agent, "steer"):
+            steer_fallback = "agent_lacks_steer"
+        else:
+            try:
+                steer_ok = bool(agent.steer(text))
+            except Exception as exc:
+                logger.debug("agent.steer() raised during inject for session=%s: %s", sid, exc)
+                steer_fallback = "steer_error"
+
+    return j(handler, {
+        "accepted": journal_ok,
+        "channels": {
+            "journal": journal_ok,
+            "steer": steer_ok,
+            "sse_broadcast": sse_ok,
+        },
+        "fallback": steer_fallback,
+        "stream_id": active_stream_id,
+        "position": position,
+    })
 
 
 def _handle_chat_steer(handler, body: dict) -> bool:
@@ -5339,6 +5560,12 @@ def cancel_stream(stream_id: str) -> bool:
                         'provider_details_label': 'Cancellation details',
                         'timestamp': int(time.time()),
                     })
+                # personal: flush dual-channel injected user messages on cancel.
+                # If the user typed mid-run and then hit Stop, the journaled
+                # message must survive cancel and land in the transcript so
+                # the next turn picks it up automatically.  Same flush hook
+                # used by the normal merge paths above.
+                _flush_injected_messages_into_session(_cs, stream_id)
                 _cs.save()
             except Exception:
                 logger.debug("Failed to clear session state on cancel for %s", _cancel_session_id)

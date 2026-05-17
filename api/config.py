@@ -3925,6 +3925,12 @@ AGENT_INSTANCES: dict = {}  # stream_id -> AIAgent instance for interrupt propag
 STREAM_PARTIAL_TEXT: dict = {}  # stream_id -> partial assistant text accumulated during streaming
 STREAM_REASONING_TEXT: dict = {}  # stream_id -> reasoning trace accumulated during streaming (#1361 §A)
 STREAM_LIVE_TOOL_CALLS: dict = {}  # stream_id -> live tool calls accumulated during streaming (#1361 §B)
+# personal: dual-channel additive interrupt — user messages injected mid-run.
+# Shared dict keyed by stream_id; each entry is a list of message dicts in
+# arrival order.  See api/streaming.py:_handle_chat_inject for how it's
+# populated and api/streaming.py around _merge_display_messages_after_agent_result
+# for how it's flushed into s.messages so the merge can't clobber them.
+STREAM_INJECTED_MESSAGES: dict = {}
 STREAM_GOAL_RELATED: dict = {}  # stream_id -> bool: only evaluate goal for goal-related turns (#1932)
 STREAM_LAST_EVENT_ID: dict = {}  # stream_id -> latest journal event_id for `id:` field on live SSE frames (stage-364)
 PENDING_GOAL_CONTINUATION: set = set()  # session_ids awaiting a goal continuation turn (#1932)

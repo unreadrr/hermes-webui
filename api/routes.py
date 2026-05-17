@@ -4558,7 +4558,12 @@ def handle_post(handler, parsed) -> bool:
         import api.routes as _routes
         _routes.get_session = _models.get_session
         _routes.Session = _models.Session
-        _routes.compact = _models.compact
+        # personal: the upstream merge removed `compact` from api.models,
+        # so this assignment used to throw AttributeError and abort the
+        # reload halfway. Use getattr+default so a missing attr is silent.
+        _compact = getattr(_models, "compact", None)
+        if _compact is not None:
+            _routes.compact = _compact
         return j(handler, {"status": "ok", "reloaded": "api.models"})
 
     if parsed.path == "/api/sessions/cleanup":
@@ -5022,6 +5027,14 @@ def handle_post(handler, parsed) -> bool:
     if parsed.path == "/api/chat/steer":
         from api.streaming import _handle_chat_steer
         return _handle_chat_steer(handler, body)
+
+    if parsed.path == "/api/chat/inject":
+        # personal: dual-channel additive interrupt — see _handle_chat_inject
+        # docstring for the full design.  Mid-run user messages go through
+        # this endpoint instead of /api/chat/steer; steer remains for legacy
+        # callers and for the steer-only-no-journal path.
+        from api.streaming import _handle_chat_inject
+        return _handle_chat_inject(handler, body)
 
     if parsed.path == "/api/terminal/start":
         return _handle_terminal_start(handler, body)
