@@ -2120,6 +2120,22 @@ body.resizing .sidebar{transition:none!important;}
 .tool-arg-key{color:var(--blue);font-family:'SF Mono',ui-monospace,monospace;font-size:var(--font-size-xs);display:block;margin-bottom:2px;}
 .tool-arg-val{color:var(--muted);font-family:'SF Mono',ui-monospace,monospace;font-size:var(--font-size-xs);white-space:pre-wrap;word-break:break-word;display:block;overflow-x:auto;}
 .tool-card-result pre{font-size:var(--font-size-xs);color:var(--muted);font-family:'SF Mono',ui-monospace,monospace;white-space:pre-wrap;word-break:break-word;max-height:240px;overflow-y:auto;margin:0;line-height:1.55;}
+/* personal: smart tool-output renderers (Phase 3).  Both share the base
+ * pre styling above; the per-line spans add color / number prefix without
+ * breaking copy-paste (each span has display:block via white-space). */
+.tool-card-result .tool-diff{font-size:var(--font-size-xs);font-family:'SF Mono',ui-monospace,monospace;white-space:pre;word-break:normal;max-height:60vh;overflow:auto;margin:0;line-height:1.55;background:transparent;}
+.tool-card-result .tool-diff .diff-line{display:block;padding:0 8px;border-left:2px solid transparent;}
+.tool-card-result .tool-diff .diff-add{background:rgba(34,197,94,.12);border-left-color:rgba(34,197,94,.55);color:color-mix(in srgb,var(--text) 80%,#22c55e 20%);}
+.tool-card-result .tool-diff .diff-del{background:rgba(239,68,68,.12);border-left-color:rgba(239,68,68,.55);color:color-mix(in srgb,var(--text) 80%,#ef4444 20%);}
+.tool-card-result .tool-diff .diff-context{color:var(--muted);}
+.tool-card-result .tool-diff .diff-header{color:var(--muted);font-weight:600;border-bottom:1px solid var(--border-subtle);}
+.tool-card-result .tool-diff .diff-hunk{color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent);}
+.tool-card-result .tool-diff .diff-blank{color:var(--muted);opacity:.5;}
+.tool-card-result .tool-lined{font-size:var(--font-size-xs);font-family:'SF Mono',ui-monospace,monospace;white-space:pre;word-break:normal;max-height:60vh;overflow:auto;margin:0;line-height:1.55;background:transparent;color:var(--text);}
+.tool-card-result .tool-lined .lined-line{display:block;padding:0 0 0 8px;}
+.tool-card-result .tool-lined .lined-num{display:inline-block;min-width:3.5ch;text-align:right;color:var(--muted);opacity:.5;user-select:none;-webkit-user-select:none;margin-right:12px;border-right:1px solid var(--border-subtle);padding-right:8px;}
+.tool-card-result .tool-lined .lined-text{color:var(--text);}
+.tool-card-result .tool-lined .lined-cont{color:var(--muted);padding-left:calc(3.5ch + 12px + 9px);}
 
 /* ── Manual compression cards (transient transcript-local feedback) ── */
 .live-compression-cards{

@@ -6396,6 +6396,74 @@ function toolIcon(name){
   return icons[name]||li('wrench');
 }
 
+// personal: smart tool-output renderer for Phase 3.
+// Recognizes content shape and renders accordingly:
+//   - unified diff (--- / +++ / @@ / +/- lines)        → red/green coloring
+//   - tool-args edits with old_string/new_string       → red/green coloring
+//   - read_file content with `LINE_NUM|TEXT` format    → line numbers
+//   - everything else                                   → mono <pre> as before
+// All paths escape user-provided text; structural HTML is hand-built.
+function _isUnifiedDiffSnippet(text){
+  const s=String(text||'');
+  if(!s) return false;
+  // CommonMark-ish heuristic: look for a leading file-header line followed
+  // by hunk markers, OR for at least two +/- prefixed lines surrounded by
+  // diff scaffolding.  Avoid false positives on plain bullet lists.
+  if(/^---\s+\S/m.test(s) && /^\+\+\+\s+\S/m.test(s)) return true;
+  if(/^@@ -\d+/m.test(s)) return true;
+  // Bare prefix-only diffs (our _cliPatchSnippetFromArgs output for patch+
+  // str_replace) — three or more lines, majority +/- prefixed.
+  const lines=s.split('\n');
+  if(lines.length<3) return false;
+  const plusMinus=lines.filter(l=>/^[+\-]/.test(l)).length;
+  return plusMinus>=2 && plusMinus*2>=lines.length;
+}
+function _isLineNumberedSnippet(text){
+  // read_file output format: 'LINE_NUM|CONTENT' per line, leading non-empty.
+  const lines=String(text||'').split('\n').filter(l=>l.length>0);
+  if(lines.length<2) return false;
+  const numbered=lines.filter(l=>/^\s*\d+\|/.test(l)).length;
+  return numbered>=2 && numbered*2>=lines.length;
+}
+function _renderUnifiedDiffHtml(text){
+  // Hand-build colored diff lines; one <span> per line keeps copy-paste clean.
+  const lines=String(text||'').split('\n');
+  const rows=lines.map(line=>{
+    if(!line.length) return '<span class="diff-line diff-blank"> </span>';
+    const c=line.charAt(0);
+    if(line.startsWith('+++') || line.startsWith('---'))
+      return `<span class="diff-line diff-header">${esc(line)}</span>`;
+    if(line.startsWith('@@'))
+      return `<span class="diff-line diff-hunk">${esc(line)}</span>`;
+    if(c==='+')
+      return `<span class="diff-line diff-add">${esc(line)}</span>`;
+    if(c==='-')
+      return `<span class="diff-line diff-del">${esc(line)}</span>`;
+    return `<span class="diff-line diff-context">${esc(line)}</span>`;
+  });
+  return `<pre class="tool-diff">${rows.join('\n')}</pre>`;
+}
+function _renderLineNumberedHtml(text){
+  const lines=String(text||'').split('\n');
+  const rows=lines.map(line=>{
+    const m=line.match(/^(\s*)(\d+)\|(.*)$/);
+    if(!m) return `<span class="lined-line lined-cont">${esc(line)}</span>`;
+    return `<span class="lined-line"><span class="lined-num">${esc(m[2])}</span><span class="lined-text">${esc(m[3])}</span></span>`;
+  });
+  return `<pre class="tool-lined">${rows.join('\n')}</pre>`;
+}
+function _renderToolDetailContent(snippet, tc){
+  // Decide which renderer to use.  Order matters: diff before lined because
+  // a colorized diff usually wins over a numeric heuristic.
+  if(_isUnifiedDiffSnippet(snippet) || (tc && tc.is_diff)){
+    return _renderUnifiedDiffHtml(snippet);
+  }
+  if(_isLineNumberedSnippet(snippet)){
+    return _renderLineNumberedHtml(snippet);
+  }
+  return `<pre>${esc(snippet)}</pre>`;
+}
+
 function buildToolCard(tc){
   const row=document.createElement('div');
   row.className='tool-card-row';
@@ -6436,12 +6504,37 @@ function buildToolCard(tc){
           Object.entries(tc.args).map(([k,v])=>`<div><span class="tool-arg-key">${esc(k)}</span> <span class="tool-arg-val">${esc(String(v))}</span></div>`).join('')
         }</div>`:''}
         ${displaySnippet?`<div class="tool-card-result">
-          <pre>${esc(displaySnippet)}</pre>
-          ${hasMore?`<button class="tool-card-more" data-full="${esc(tc.snippet||'').replace(/"/g,'&quot;')}" data-short="${esc(displaySnippet||'').replace(/"/g,'&quot;')}" data-more-label="${esc(moreLabel)}" data-less-label="${esc(lessLabel)}" onclick="event.stopPropagation();const p=this.previousElementSibling;const full=this.dataset.full;const short=this.dataset.short;p.textContent=p.textContent===short?full:short;this.textContent=p.textContent===short?this.dataset.moreLabel:this.dataset.lessLabel">${esc(moreLabel)}</button>`:''}
+          ${_renderToolDetailContent(displaySnippet, tc)}
+          ${hasMore?`<button class="tool-card-more" data-full="${esc(tc.snippet||'').replace(/"/g,'&quot;')}" data-short="${esc(displaySnippet||'').replace(/"/g,'&quot;')}" data-more-label="${esc(moreLabel)}" data-less-label="${esc(lessLabel)}" onclick="event.stopPropagation();_toggleToolCardMore(this)">${esc(moreLabel)}</button>`:''}
         </div>`:''}
       </div>`:''}
     </div>`;
   return row;
+}
+
+// personal: extracted handler so the toggle can re-render via the smart
+// _renderToolDetailContent path instead of the original textContent swap.
+// The original inline handler set `p.textContent = full`, which destroyed
+// the diff/lined HTML structure on the first click.
+function _toggleToolCardMore(btn){
+  if(!btn) return;
+  const wrap=btn.previousElementSibling;
+  if(!wrap) return;
+  const full=btn.dataset.full || '';
+  const short=btn.dataset.short || '';
+  const showingShort = btn.dataset.showing !== 'full';
+  const next = showingShort ? full : short;
+  // Re-run the smart renderer over the chosen text so diff coloring /
+  // line numbering survives the toggle.  The renderer returns the full
+  // <pre>… or fallback markup; replace the wrap's children entirely.
+  const html = _renderToolDetailContent(next, null);
+  wrap.outerHTML = html;
+  // The newly inserted node is now in DOM as wrap's replacement; rebind
+  // by walking siblings of the button (which is still the next element
+  // of whatever just got inserted, since outerHTML replaced wrap in place).
+  // Toggle button label + state.
+  btn.textContent = showingShort ? btn.dataset.lessLabel : btn.dataset.moreLabel;
+  btn.dataset.showing = showingShort ? 'full' : 'short';
 }
 
 function _syncToolCallGroupSummary(group){
