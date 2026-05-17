@@ -4988,19 +4988,32 @@ def _run_agent_streaming(
 
 
 def _flush_injected_messages_into_session(s, stream_id: str | None) -> int:
-    """Pop STREAM_INJECTED_MESSAGES[stream_id] and append entries to s.messages.
+    """Pop STREAM_INJECTED_MESSAGES[stream_id] and insert entries into s.messages
+    in CHRONOLOGICAL position (by timestamp).
 
     personal: dual-channel additive interrupt — flush hook.
 
     Called by the streaming worker's done/error/cancel paths AFTER the
     normal merge has settled s.messages.  This is the moment when the
     journal channel becomes durable: any user msg that arrived via
-    /api/chat/inject during the run is now appended at the end of the
-    transcript, so it survives subsequent saves and any steer that landed
-    inside the agent's result history is not double-counted (the merge
-    already strips _injected duplicates by content+role identity).
+    /api/chat/inject during the run is now inserted into the transcript
+    based on its timestamp, so it survives subsequent saves and any
+    steer that landed inside the agent's result history is not
+    double-counted (the merge already strips _injected duplicates by
+    content+role identity).
 
-    Returns the number of messages flushed (0 if no injection).
+    Insertion strategy: walk s.messages from the end, find the first
+    message whose timestamp is <= the injected msg's timestamp, insert
+    after it.  This places the injected msg at the chronologically
+    correct point — before assistant turns that streamed AFTER the
+    inject was made, after assistant content that streamed BEFORE.
+
+    Without this fix the operator sees their mid-run message appended
+    AFTER the assistant's final response, breaking causal order
+    (operator screenshot 2026-05-18: 'я отправил сообщение, но твой
+    ответ пришел в предыдущем по стриму').
+
+    Returns the number of messages inserted (0 if no injection).
     """
     if not stream_id:
         return 0
@@ -5034,7 +5047,36 @@ def _flush_injected_messages_into_session(s, stream_id: str | None) -> int:
                     break
         if already_present:
             continue
-        s.messages.append(copy.deepcopy(msg))
+        # Chronological insertion.  Find insert_at = the first index from
+        # the end whose ts is strictly greater than ours (we go BEFORE it).
+        # Equivalent loop direction: scan from end, advance until we hit
+        # a message that's older-or-equal, then insert RIGHT AFTER that one.
+        try:
+            inj_ts = int(msg.get("timestamp") or 0)
+        except (TypeError, ValueError):
+            inj_ts = 0
+        insert_at = len(s.messages)  # default: end (matches old behavior if no ts)
+        if inj_ts > 0:
+            for i in range(len(s.messages) - 1, -1, -1):
+                existing = s.messages[i]
+                try:
+                    ex_ts = int((existing or {}).get("timestamp") or 0)
+                except (TypeError, ValueError):
+                    ex_ts = 0
+                if ex_ts and ex_ts <= inj_ts:
+                    insert_at = i + 1
+                    break
+                if ex_ts == 0:
+                    # Stamp-less message — keep walking; we don't know
+                    # whether it predates us.  Prefer to land in front of
+                    # it so user content stays together.
+                    continue
+            else:
+                # Fell off the front: every existing msg is newer than
+                # the injection (operator typed something during a long
+                # tool that started before any persisted message).
+                insert_at = 0
+        s.messages.insert(insert_at, copy.deepcopy(msg))
         flushed += 1
     return flushed
 
