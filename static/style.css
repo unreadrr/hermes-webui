@@ -372,6 +372,59 @@
   :root[data-skin="cream"] .thinking-card{
     border-radius:14px;
   }
+  /* Markdown typography refinements — match the warm-cream personality.
+   * Headings get tighter letter-spacing + accent underline for h2/h3.
+   * Blockquotes use accent-bg as a tonal callout instead of plain border-left. */
+  :root[data-skin="cream"] .msg-body h1,
+  :root[data-skin="cream"] .msg-body h2,
+  :root[data-skin="cream"] .msg-body h3{
+    letter-spacing:-0.01em;
+    color:var(--strong);
+  }
+  :root[data-skin="cream"] .msg-body h1{font-size:1.5em;font-weight:700;margin:1em 0 .5em;}
+  :root[data-skin="cream"] .msg-body h2{font-size:1.25em;font-weight:600;margin:1em 0 .4em;}
+  :root[data-skin="cream"] .msg-body h3{font-size:1.1em;font-weight:600;margin:.85em 0 .35em;}
+  :root[data-skin="cream"] .msg-body blockquote{
+    border-left:3px solid var(--accent);
+    background:var(--accent-bg);
+    padding:10px 14px;
+    margin:8px 0;
+    border-radius:0 10px 10px 0;
+    color:var(--text);
+  }
+  :root[data-skin="cream"] .msg-body table{
+    border-collapse:separate;
+    border-spacing:0;
+    border:1px solid var(--border);
+    border-radius:10px;
+    overflow:hidden;
+    margin:10px 0;
+  }
+  :root[data-skin="cream"] .msg-body th{
+    background:var(--accent-bg);
+    color:var(--accent-text);
+    font-weight:600;
+    padding:8px 12px;
+    text-align:left;
+  }
+  :root[data-skin="cream"] .msg-body td{
+    padding:8px 12px;
+    border-top:1px solid var(--border);
+  }
+  :root[data-skin="cream"] .msg-body ul li,
+  :root[data-skin="cream"] .msg-body ol li{
+    margin:.2em 0;
+  }
+  /* Inline links — tonal underline */
+  :root[data-skin="cream"] .msg-body a:not(.no-style){
+    color:var(--accent);
+    text-decoration-thickness:1px;
+    text-underline-offset:3px;
+  }
+  :root[data-skin="cream"] .msg-body a:not(.no-style):hover{
+    color:var(--strong);
+    text-decoration-thickness:2px;
+  }
   :root[data-skin="cream"] .composer-box{border-radius:28px;padding:6px;}
   :root[data-skin="cream"] textarea#msg{padding:10px 14px 6px;}
   :root[data-skin="cream"] .composer-box:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--focus-glow),0 4px 16px rgba(62,44,28,0.10);}
