@@ -10,8 +10,9 @@
 // personal: appended suffix to force cache eviction for uncommitted ui.js fix
 // (compression banner anchor + offline debounce + tool naming/scroll +
 //  partial_tool_calls preserved on cancel reload + dual-channel additive
-//  interrupt frontend + smart tool detail renderer w/ github-style diff) — bump.
-const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-additive-diff-v2';
+//  interrupt frontend + smart tool detail renderer w/ github-style diff +
+//  cream skin) — bump.
+const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-cream';
 
 // Static assets that form the app shell.
 //

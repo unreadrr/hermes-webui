@@ -175,6 +175,76 @@
   :root[data-skin="sienna"] .session-item.active{border-left:2px solid var(--accent);}
   :root[data-skin="sienna"] .composer-box{border-radius:18px;}
 
+  /* ── Skin: Cream (M3-derived molochny-coffee) ──
+     Adapted from /home/user1/workspace/ui-research/devin-node/web/src/m3/
+     tokens.css — operator-favoured cream/mocha M3 palette.  Light mode
+     ('faf4ea' canvas + '#3e2c1c' mocha ink) is the headline look; dark
+     mode rolls into the deep mokko surface ('#15110b').  Higher chroma
+     than Sienna on the warm channel, calmer on the user bubble.  Opt-in
+     via Settings → Skin picker.
+     Same structural pattern as Sienna so all existing UI components
+     (composer, tool cards, send button, sidebar, etc.) inherit cleanly. */
+  :root[data-skin="cream"]{
+    --bg:#FAF4EA;--sidebar:#F5E8D2;--surface:#FFF8EE;
+    --border:#DCC9B0;--border2:#B89D7E;
+    --text:#3E2C1C;--muted:#6E5331;--strong:#2A1D11;--em:#5A402A;
+    --accent:#6F4E37;--accent-hover:#5A3D2A;--accent-text:#5A3D2A;
+    --accent-bg:rgba(111,78,55,0.08);--accent-bg-strong:rgba(111,78,55,0.18);
+    --code-bg:#F5E8D2;--code-inline-bg:rgba(62,44,28,0.07);--code-text:#8B5A2B;--pre-text:#3E2C1C;
+    --topbar-bg:rgba(255,248,238,0.96);--main-bg:rgba(250,244,234,0.55);
+    --input-bg:rgba(62,44,28,0.04);--hover-bg:rgba(62,44,28,0.06);
+    --focus-ring:rgba(111,78,55,0.3);--focus-glow:rgba(196,154,108,0.18);
+    --blue:#2563A8;--gold:#A47551;
+    --user-bubble-bg:#F0DDC4;--user-bubble-border:#E1C8A4;
+    --user-bubble-text:#3E2C1C;--user-bubble-placeholder:#8B6F4E;
+    --user-selection-bg:rgba(196,154,108,0.32);--user-selection-text:#2A1D11;
+  }
+  :root.dark[data-skin="cream"]{
+    --bg:#15110B;--sidebar:#1B1611;--surface:#1F1812;
+    --border:#3A2D22;--border2:#56432F;
+    --text:#F4E5CF;--muted:#CBB89A;--strong:#FBE7C9;--em:#D9C29F;
+    --accent:#E5C089;--accent-hover:#D4AB6F;--accent-text:#F2E0C2;
+    --accent-bg:rgba(229,192,137,0.10);--accent-bg-strong:rgba(229,192,137,0.20);
+    --code-bg:#2A2018;--code-inline-bg:rgba(255,255,255,0.06);--code-text:#F2E0C2;--pre-text:#F4E5CF;
+    --topbar-bg:rgba(27,22,17,0.96);--main-bg:rgba(21,17,11,0.55);
+    --input-bg:rgba(255,248,238,0.04);--hover-bg:rgba(255,248,238,0.06);
+    --focus-ring:rgba(229,192,137,0.32);--focus-glow:rgba(229,192,137,0.10);
+    --blue:#9BC4DD;--gold:#E5C089;
+    --user-bubble-bg:#2A2018;--user-bubble-border:#3F3026;
+    --user-bubble-text:#F4E5CF;--user-bubble-placeholder:#9F876A;
+    --user-selection-bg:rgba(229,192,137,0.28);--user-selection-text:#FBE7C9;
+  }
+  :root[data-skin="cream"]:not(.dark) .new-chat-btn,
+  :root.dark[data-skin="cream"] .new-chat-btn{background:var(--accent);border-color:var(--accent);color:#FFF8EE;font-weight:600;box-shadow:0 1px 2px rgba(62,44,28,0.10);}
+  :root[data-skin="cream"]:not(.dark) .new-chat-btn:hover,
+  :root.dark[data-skin="cream"] .new-chat-btn:hover{background:var(--accent-hover);border-color:var(--accent-hover);color:#FFF8EE;}
+  :root[data-skin="cream"] .tool-card{background:rgba(62,44,28,0.025);border-color:var(--border);border-radius:10px;}
+  :root[data-skin="cream"] .tool-card:hover{border-color:var(--border2);}
+  :root[data-skin="cream"] .tool-card-running{background:var(--accent-bg);border-color:var(--accent-bg-strong);}
+  :root[data-skin="cream"] .tool-card-name{color:var(--muted);font-weight:500;}
+  :root[data-skin="cream"] .tool-arg-key{color:var(--accent-text);}
+  :root[data-skin="cream"] .tool-card-more{color:var(--accent-text);}
+  :root[data-skin="cream"] .tool-card-running-dot{background:var(--accent);}
+  :root.dark[data-skin="cream"] .tool-card{background:rgba(255,248,238,0.025);}
+  :root[data-skin="cream"] .msg-row[data-role="user"] .msg-body{border-radius:16px;padding:12px 16px;}
+  :root[data-skin="cream"] .msg-row[data-role="user"] .msg-body code{color:var(--user-bubble-text);background:rgba(62,44,28,0.08);}
+  :root[data-skin="cream"] button.send-btn {box-shadow:0 1px 3px rgba(111,78,55,0.32);}
+  :root[data-skin="cream"] button.send-btn:hover {box-shadow:0 2px 10px rgba(111,78,55,0.50);}
+  :root[data-skin="cream"] .session-item.active{border-left:2px solid var(--accent);}
+  :root[data-skin="cream"] .composer-box{border-radius:18px;}
+  /* Cream-specific: warmer hairline divider on tool-diff num column to
+   * match the cream/mocha palette instead of the default blue-ish var. */
+  :root[data-skin="cream"] .tool-card-result .tool-diff .diff-num{
+    background:rgba(245,232,210,0.65);
+    color:rgba(110,83,49,0.85);
+    border-right-color:rgba(220,201,176,0.7);
+  }
+  :root.dark[data-skin="cream"] .tool-card-result .tool-diff .diff-num{
+    background:rgba(42,32,24,0.7);
+    color:rgba(203,184,154,0.75);
+    border-right-color:rgba(58,45,34,0.7);
+  }
+
   /* ── Skin: Catppuccin (Latte light / Mocha dark) ──
      Full palette rewrite using the Catppuccin mauve accent. Light mode maps
      to Latte, dark mode maps to Mocha, matching the Sienna-style single-skin
