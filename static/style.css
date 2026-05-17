@@ -670,6 +670,44 @@
     color:var(--md-on-surface-variant,var(--muted));
     opacity:.85;
   }
+  /* Thinking card — M3 outlined surface, accent header, smooth open transition */
+  :root[data-skin="cream"] .thinking-card{
+    border-radius:14px;
+    background:var(--surface-subtle,rgba(62,44,28,0.04));
+    border:1px solid var(--border-subtle,var(--border));
+    margin:6px 0;
+    transition:border-color .15s,background-color .15s;
+  }
+  :root.dark[data-skin="cream"] .thinking-card{
+    background:rgba(255,248,238,0.04);
+  }
+  :root[data-skin="cream"] .thinking-card:hover{
+    border-color:var(--border2);
+  }
+  :root[data-skin="cream"] .thinking-card-header{
+    padding:8px 14px;
+    color:var(--accent);
+    font-size:12px;
+    font-weight:600;
+    letter-spacing:.01em;
+    opacity:.9;
+  }
+  :root[data-skin="cream"] .thinking-card.open .thinking-card-body{
+    border-top:1px solid var(--border-subtle,var(--border));
+    padding:10px 14px;
+  }
+  /* Composer attach-tray pill — single row of file chips above input */
+  :root[data-skin="cream"] .attach-tray{
+    padding:10px 14px 0;
+    gap:6px;
+  }
+  :root[data-skin="cream"] .attach-tray > *{
+    border-radius:999px;
+    padding:4px 6px 4px 10px;
+    background:var(--surface-2,var(--surface-subtle,rgba(62,44,28,0.06)));
+    border:1px solid var(--border);
+    font-size:12px;
+  }
   /* M3 typography scale inside assistant body — display/headline/title/body. */
   :root[data-skin="cream"] .msg-row[data-role="assistant"] .msg-body h1{
     font-size:22px;
