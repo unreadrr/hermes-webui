@@ -28,8 +28,9 @@
 //  inject/steer pills accumulate (don't replace prior) +
 //  freeze live turn before pill (correct chronological order) +
 //  M3 sidebar search pill +
-//  M3 date group headers) — bump.
-const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-date-headers';
+//  M3 date group headers +
+//  M3 approval card + queue card softer corners) — bump.
+const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-approval-pill';
 
 // Static assets that form the app shell.
 //

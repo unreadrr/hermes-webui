@@ -407,6 +407,44 @@
   :root[data-skin="cream"] .session-date-header:hover{
     opacity:.9;
   }
+  /* M3 approval card — softer corners, larger pill buttons, no harsh red */
+  :root[data-skin="cream"] .approval-inner{
+    border-radius:20px;
+    border-color:var(--border2);
+    padding:18px 20px 42px;
+  }
+  :root[data-skin="cream"] .approval-header{
+    color:var(--accent);
+    font-size:14px;
+  }
+  :root[data-skin="cream"] .approval-cmd{
+    border-radius:10px;
+    padding:10px 14px;
+  }
+  :root[data-skin="cream"] .approval-btn{
+    border-radius:999px;
+    padding:8px 16px;
+    transition:background .15s,border-color .15s,transform .12s;
+  }
+  :root[data-skin="cream"] .approval-btn:hover{
+    transform:translateY(-1px);
+  }
+  :root[data-skin="cream"] .approval-btn:active{
+    transform:scale(.97);
+  }
+  :root[data-skin="cream"] .approval-btn.once{
+    background:var(--accent);
+    color:var(--bg);
+    border-color:transparent;
+  }
+  :root[data-skin="cream"] .approval-btn.once:hover{
+    background:var(--accent);
+    filter:brightness(1.08);
+  }
+  /* Queue card — softer top corners */
+  :root[data-skin="cream"] .queue-card-inner{
+    border-radius:18px 18px 0 0;
+  }
   /* Queue pill — when there are queued mid-stream messages, show as
    * a rounded M3 pill instead of the legacy hard-cornered top-attached
    * tab.  Matches the rest of the cream chip language. */
