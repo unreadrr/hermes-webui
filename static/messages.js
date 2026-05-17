@@ -666,7 +666,8 @@ function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
         if(streamId){
           const st=await api(`/api/chat/stream/status?stream_id=${encodeURIComponent(streamId)}`);
           if(st.active){
-            setComposerStatus('Reconnected');
+            // personal: silent reconnect — see _wireSSE comment above for
+            // rationale.  Operator doesn't want a 'Reconnected' flash.
             _wireSSE(new EventSource(new URL(`api/chat/stream?stream_id=${encodeURIComponent(streamId)}`,document.baseURI||location.href).href,{withCredentials:true}));
             return;
           }
@@ -1833,17 +1834,20 @@ function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
       // Attempt one reconnect if the stream is still active server-side
       if(!_reconnectAttempted && streamId){
         _reconnectAttempted=true;
-        setComposerStatus('Reconnecting…');
+        // personal: silent reconnect — operator complaint that the
+        // 'Reconnecting…' / 'Reconnected' composer status flashed up
+        // every time the SSE stream blipped, sitting next to the Send
+        // button.  Reconnect is a normal operation, not a user-facing
+        // event; suppress all three composer-status updates and just
+        // re-wire the EventSource transparently.
         setTimeout(async()=>{
           try{
             const st=await api(`/api/chat/stream/status?stream_id=${encodeURIComponent(streamId)}`);
             if(st.active){
-              setComposerStatus('Reconnected');
               _wireSSE(new EventSource(new URL(`api/chat/stream?stream_id=${encodeURIComponent(streamId)}`,document.baseURI||location.href).href,{withCredentials:true}));
               return;
             }
             if(st.replay_available){
-              setComposerStatus('Restoring stream…');
               _wireSSE(new EventSource(new URL(`api/chat/stream?stream_id=${encodeURIComponent(streamId)}${_runJournalReplayParams()}`,document.baseURI||location.href).href,{withCredentials:true}));
               return;
             }

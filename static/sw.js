@@ -13,8 +13,9 @@
 //  interrupt frontend + smart tool detail renderer w/ github-style diff +
 //  cream skin + micro-animations + composer focus-glow + dot-wave +
 //  message slide-in + cream-specific diff colors + send-btn transitions +
-//  topbar chip hover/press + activity-group expand + scroll-bottom polish) — bump.
-const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-final-4';
+//  topbar chip hover/press + activity-group expand + scroll-bottom polish +
+//  steer fallback + silent reconnect) — bump.
+const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-final-5';
 
 // Static assets that form the app shell.
 //

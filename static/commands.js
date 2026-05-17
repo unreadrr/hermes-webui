@@ -906,6 +906,15 @@ function _showSteerIndicator(text){
 // so this same browser tab AND any other tab on the same session sees the
 // message in the transcript instantly.  The msg is rendered optimistically
 // here too so the keystroke→appearance latency is zero.
+//
+// IMPORTANT: this endpoint requires a webui restart to activate.  When the
+// backend is still running the older code, /api/chat/inject returns 404 or
+// some other failure shape — _tryInject MUST fall back to steer (not queue)
+// in that case, otherwise users lose the existing steer behavior they
+// already had before this work.  The fallback chain is:
+//   inject → steer → queue
+// instead of
+//   inject → queue (which silently breaks the steer mode users had)
 async function _tryInject(msg, files){
   const optimisticTs = Math.floor(Date.now()/1000);
   // Optimistic UI: drop the user msg into the local transcript immediately
@@ -938,16 +947,10 @@ async function _tryInject(msg, files){
   }
   const ch=(result&&result.channels)||{};
   if(result&&result.accepted){
-    // Journal channel succeeded — message is durable backend-side.
-    // Steer outcome is informational only: ch.steer=true means LLM will
-    // see it at next tool-result; ch.steer=false means it lands on the
-    // next turn (or on cancel-then-restart).  We don't surface the
-    // distinction to the user — both are 'message accepted'.
     return {ok:true, steer:!!ch.steer};
   }
-  // Journal failed — usually because no stream is running anymore.
-  // Pull the optimistic msg back out and fall back to the queue path
-  // so the operator's text isn't lost.
+  // Roll back the optimistic insert — _trySteer / queue path will create
+  // its own representation (steer pill, queue badge).
   if(S.session){
     const lastIdx=S.messages.length-1;
     const last=S.messages[lastIdx];
@@ -958,8 +961,24 @@ async function _tryInject(msg, files){
   }
   const reason=(result&&result.fallback)||'unknown';
   if(reason==='not_running' || reason==='stream_dead'){
-    // Nothing was running — caller should send normally.
     return {ok:false, fallback:'idle'};
+  }
+  // Backend doesn't know /api/chat/inject (process not restarted yet),
+  // OR the inject path failed for another reason.  Try the existing
+  // steer pathway so the user keeps the same UX they had before this
+  // patch landed.  If steer also fails, _trySteer itself falls back
+  // to queue+cancel internally — no extra branch needed here.
+  if(typeof _trySteer==='function' && S.session){
+    try{
+      // _trySteer manages its own files/state; we already cleared
+      // pendingFiles in the caller, so this is a clean steer attempt.
+      await _trySteer(msg, /*explicitSteer=*/false);
+      // _trySteer toasts internally on success/fallback — return
+      // ok:true so the caller doesn't re-queue on top.
+      return {ok:true, steer:true, _via:'steer-fallback'};
+    }catch(_){
+      // fall through to caller-level queue
+    }
   }
   return {ok:false, fallback:reason};
 }
