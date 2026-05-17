@@ -898,6 +898,72 @@ function _showSteerIndicator(text){
   if(typeof scrollToBottom==='function') scrollToBottom();
 }
 
+// personal: dual-channel additive interrupt — Devin-style mid-run send.
+// Calls /api/chat/inject which (1) saves the message into a per-stream
+// bucket on the backend so it survives done/cancel/error merge AND (2)
+// best-effort delivers it to the running agent via steer for tool-result
+// boundary injection.  Backend broadcasts a 'user_journaled' SSE event
+// so this same browser tab AND any other tab on the same session sees the
+// message in the transcript instantly.  The msg is rendered optimistically
+// here too so the keystroke→appearance latency is zero.
+async function _tryInject(msg, files){
+  const optimisticTs = Math.floor(Date.now()/1000);
+  // Optimistic UI: drop the user msg into the local transcript immediately
+  // so the operator sees it without waiting for the SSE round-trip.  The
+  // backend's user_journaled event will arrive shortly and de-dup against
+  // this entry by (role, content) identity inside renderMessages.
+  if(S.session){
+    S.messages.push({
+      role:'user',
+      content:msg,
+      timestamp:optimisticTs,
+      _injected:true,
+      _injected_optimistic:true,
+      attachments: files && files.length ? files : undefined,
+    });
+    try{ renderMessages({preserveScroll:true}); }catch(_){}
+  }
+  let result=null;
+  try{
+    result=await api('/api/chat/inject',{
+      method:'POST',
+      body:JSON.stringify({
+        session_id:S.session.session_id,
+        text:msg,
+        attachments: files && files.length ? files : undefined,
+      }),
+    });
+  }catch(e){
+    result={accepted:false, fallback:'network_error', channels:{journal:false,steer:false}};
+  }
+  const ch=(result&&result.channels)||{};
+  if(result&&result.accepted){
+    // Journal channel succeeded — message is durable backend-side.
+    // Steer outcome is informational only: ch.steer=true means LLM will
+    // see it at next tool-result; ch.steer=false means it lands on the
+    // next turn (or on cancel-then-restart).  We don't surface the
+    // distinction to the user — both are 'message accepted'.
+    return {ok:true, steer:!!ch.steer};
+  }
+  // Journal failed — usually because no stream is running anymore.
+  // Pull the optimistic msg back out and fall back to the queue path
+  // so the operator's text isn't lost.
+  if(S.session){
+    const lastIdx=S.messages.length-1;
+    const last=S.messages[lastIdx];
+    if(last && last._injected_optimistic && last.content===msg){
+      S.messages.splice(lastIdx, 1);
+      try{ renderMessages({preserveScroll:true}); }catch(_){}
+    }
+  }
+  const reason=(result&&result.fallback)||'unknown';
+  if(reason==='not_running' || reason==='stream_dead'){
+    // Nothing was running — caller should send normally.
+    return {ok:false, fallback:'idle'};
+  }
+  return {ok:false, fallback:reason};
+}
+
 async function _trySteer(msg, explicitSteer){
   let result=null;
   try{

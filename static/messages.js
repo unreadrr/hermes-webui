@@ -149,19 +149,41 @@ async function send(){
         }
       }
       const busyMode=window._busyInputMode||'queue';
-      if(busyMode==='steer'&&S.activeStreamId&&typeof _trySteer==='function'){
-        // Real steer: clear the input first so the user gets immediate
-        // feedback, then ship the steer payload via /api/chat/steer.
-        // _trySteer falls back to queue+cancel internally if the agent
-        // isn't running / cached / steer-capable.
+      // personal: dual-channel additive interrupt (Devin-style).
+      // Default behaviour is now: attempt /api/chat/inject regardless of
+      // busy_input_mode setting.  inject is non-destructive — it doesn't
+      // cancel the stream, doesn't queue (the message lands in the
+      // backend's per-stream journal AND parallel-steers the agent),
+      // and the operator sees their message in the transcript instantly.
+      // Only if no stream is actually running does inject fall back to
+      // the legacy busy-mode behaviour (queue / interrupt / explicit steer).
+      // The setting `busy_input_mode='interrupt'` still works as a hard
+      // override for users who genuinely want destructive cancel-on-send.
+      if(busyMode!=='interrupt' && S.activeStreamId && typeof _tryInject==='function'){
         $('msg').value='';autoResize();
-        // Do NOT clear pendingFiles yet — _trySteer may fall back to
-        // interrupt+queue and needs the files for queueSessionMessage.
-        // _trySteer clears pendingFiles itself in the fallback path, and
-        // the server returns accepted:true (no files sent) on success.
-        await _trySteer(text, /*explicitSteer=*/false);
-        // After _trySteer: clear any remaining files (success path).
+        const filesCopy=[...S.pendingFiles];
         S.pendingFiles=[];renderTray();
+        const _r=await _tryInject(text, filesCopy);
+        if(_r && _r.ok){
+          // Done — message lives in backend journal + may be in agent's
+          // tool-result feed.  No further action.
+          return;
+        }
+        if(_r && _r.fallback==='idle'){
+          // Stream ended between busy-check and inject.  Send normally.
+          $('msg').value=text;
+          // restore files so normal send picks them up
+          S.pendingFiles=filesCopy;
+          renderTray();
+          // Fall through to the non-busy send path below by NOT returning.
+        } else {
+          // Real journal error — fall back to queue so the operator's
+          // message isn't lost.  Queue itself is the conservative path.
+          queueSessionMessage(S.session.session_id,{text,files:filesCopy,model:S.session&&S.session.model||($('modelSelect')&&$('modelSelect').value)||'',model_provider:S.session&&S.session.model_provider||null,profile:S.activeProfile||'default'});
+          updateQueueBadge(S.session.session_id);
+          showToast(`Queued: "${text.slice(0,40)}${text.length>40?'…':''}"`,2000);
+          return;
+        }
       } else if(busyMode==='interrupt'){
         // Queue the message, then cancel so drain re-sends it.
         queueSessionMessage(S.session.session_id,{text,files:[...S.pendingFiles],model:S.session&&S.session.model||($('modelSelect')&&$('modelSelect').value)||'',model_provider:S.session&&S.session.model_provider||null,profile:S.activeProfile||'default'});
@@ -174,17 +196,26 @@ async function send(){
         } else {
           showToast(`Queued: "${text.slice(0,40)}${text.length>40?'…':''}"`,2000);
         }
+        return;
       } else {
-        // Default: queue mode (current behavior). Also the fallback for
-        // 'steer' mode when no stream is active or _trySteer is unavailable.
+        // Defensive fallback: queue (only reached if _tryInject is undefined,
+        // e.g. mid-rollout where commands.js hasn't loaded yet).
         queueSessionMessage(S.session.session_id,{text,files:[...S.pendingFiles],model:S.session&&S.session.model||($('modelSelect')&&$('modelSelect').value)||'',model_provider:S.session&&S.session.model_provider||null,profile:S.activeProfile||'default'});
         $('msg').value='';autoResize();
         S.pendingFiles=[];renderTray();
         updateQueueBadge(S.session.session_id);
         showToast(`Queued: "${text.slice(0,40)}${text.length>40?'…':''}"`,2000);
+        return;
       }
     }
-    return;
+    // Either no text was given, or _tryInject's idle fallback wants the
+    // normal-send path to handle this message.  Fall through to the
+    // non-busy logic below by NOT returning here.
+    if(!S.busy && !compressionRunning){
+      // Stream ended while we were inject-ing — proceed with normal send.
+    } else {
+      return;
+    }
   }
   if(S.session&&(S.session.read_only||S.session.is_read_only)){
     if(typeof showToast==='function') showToast('Read-only imported sessions cannot be modified.',3000);
@@ -1606,6 +1637,28 @@ function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
       source.close();
     });
 
+    source.addEventListener('user_journaled',e=>{
+      // personal: dual-channel additive interrupt — backend confirms a
+      // user message was journaled mid-run.  The same browser tab that
+      // typed it already rendered the optimistic message inside
+      // _tryInject; this listener is for OTHER tabs / browsers viewing
+      // the same session, so they see the operator's input live.
+      // De-dup against any optimistic entry by (role, content) identity
+      // so the same tab doesn't double-render.
+      if(!S.session||S.session.session_id!==activeSid) return;
+      try{
+        const d=JSON.parse(e.data||'{}');
+        const m=d&&d.message;
+        if(!m||!m.role||!m.content) return;
+        const exists=(S.messages||[]).some(x=>
+          x && x.role===m.role && String(x.content||'')===String(m.content||'')
+        );
+        if(exists) return;
+        S.messages.push({...m, _injected:true});
+        try{ renderMessages({preserveScroll:true}); }catch(_){}
+      }catch(err){}
+    });
+
     source.addEventListener('pending_steer_leftover',e=>{
       // The agent finished its turn with steer text still stashed (no
       // tool-result boundary fired). Match the CLI's leftover-delivery
@@ -1852,7 +1905,7 @@ function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
       _setActivePaneIdleIfOwner();
     });
 
-    for(const _runJournalEventName of ['token','interim_assistant','reasoning','tool','tool_complete','approval','clarify','title','title_status','goal','goal_continue','done','stream_end','pending_steer_leftover','compressing','compressed','metering','apperror','warning','error','cancel']){
+    for(const _runJournalEventName of ['token','interim_assistant','reasoning','tool','tool_complete','approval','clarify','title','title_status','goal','goal_continue','done','stream_end','pending_steer_leftover','user_journaled','compressing','compressed','metering','apperror','warning','error','cancel']){
       source.addEventListener(_runJournalEventName,_rememberRunJournalCursor);
     }
   }

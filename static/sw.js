@@ -9,8 +9,9 @@
 // Bumps automatically whenever the git commit changes — no manual edits needed.
 // personal: appended suffix to force cache eviction for uncommitted ui.js fix
 // (compression banner anchor + offline debounce + tool naming/scroll +
-//  partial_tool_calls preserved on cancel reload) — bump.
-const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-fact1-3-4b-cancel';
+//  partial_tool_calls preserved on cancel reload + dual-channel additive
+//  interrupt frontend) — bump.
+const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-additive';
 
 // Static assets that form the app shell.
 //
