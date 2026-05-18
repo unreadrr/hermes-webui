@@ -1207,6 +1207,17 @@
     border:1px solid var(--border);
     transition:border-color .2s,box-shadow .2s;
     flex-wrap:nowrap;
+    box-shadow:0 2px 6px rgba(62,44,28,0.10),0 8px 20px rgba(62,44,28,0.06);
+  }
+  :root.dark[data-skin="cream"] .composer-box{
+    box-shadow:0 2px 6px rgba(0,0,0,0.50),0 8px 20px rgba(0,0,0,0.32);
+  }
+  :root[data-skin="cream"] .composer-box:focus-within{
+    border-color:var(--accent);
+    box-shadow:0 0 0 3px var(--focus-glow,var(--accent-bg)),0 4px 16px rgba(62,44,28,0.12);
+  }
+  :root.dark[data-skin="cream"] .composer-box:focus-within{
+    box-shadow:0 0 0 3px var(--focus-glow,var(--accent-bg)),0 4px 16px rgba(0,0,0,0.55);
   }
   :root[data-skin="cream"] .composer-box .composer-footer,
   :root[data-skin="cream"] .composer-box .composer-left,
