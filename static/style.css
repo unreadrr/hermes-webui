@@ -630,6 +630,27 @@
   :root[data-skin="cream"] .tool-call-group-body .tool-card:first-child{
     margin-top:4px;
   }
+  /* M3 right workspace panel — surface tone, softer entries */
+  :root[data-skin="cream"] .rightpanel{
+    background:var(--surface);
+    border-left:1px solid var(--border);
+  }
+  :root[data-skin="cream"] .rightpanel .workspace-panel-heading{
+    font-size:11px;
+    font-weight:600;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+    opacity:.7;
+  }
+  :root[data-skin="cream"] .rightpanel .tree-item{
+    padding:4px 8px;
+    border-radius:8px;
+    line-height:1.6;
+    transition:background .12s,color .12s;
+  }
+  :root[data-skin="cream"] .rightpanel .tree-item:hover{
+    background:var(--accent-bg);
+  }
   /* Tool card header — proper M3 row with icon chip + name + preview */
   :root[data-skin="cream"] .tool-card-header{
     display:flex;

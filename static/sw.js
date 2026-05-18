@@ -55,8 +55,9 @@
 //  M3 DOM rewrite — chips moved to topbar via cream-m3.js +
 //  M3 user bubble consolidated (single source of truth) +
 //  composer floating pill (max-width 780, centered, fade gradient) +
-//  tool-card hierarchy in Activity group (indent + rhythm)) — bump.
-const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-tool-hierarchy';
+//  tool-card hierarchy in Activity group (indent + rhythm) +
+//  M3 right workspace panel (surface tone + softer entries)) — bump.
+const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-rightpanel';
 
 // Static assets that form the app shell.
 //
