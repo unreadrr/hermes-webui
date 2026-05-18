@@ -57,8 +57,9 @@
 //  tool-card hierarchy in Activity group (indent + rhythm) +
 //  M3 right workspace panel (surface tone + softer entries) +
 //  fix duplicate tool cards on cancelled turns +
-//  fix tool-clump-at-end on paginated history (skip unanchored aIdx)) — bump.
-const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-tool-anchor-fix';
+//  fix tool-clump-at-end on paginated history (skip unanchored aIdx) +
+//  clear S.toolCalls on prepend (re-derive against new indices)) — bump.
+const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-tool-prepend-clear';
 
 // Static assets that form the app shell.
 //

@@ -1265,6 +1265,16 @@ async function _loadOlderMessages() {
     const container = $('messages');
     const prevScrollH = container ? container.scrollHeight : 0;
     S.messages = [...olderMsgs, ...S.messages];
+    // personal: tool-card derivation in ui.js:5968 stamps assistant_msg_idx
+    // using the LOCAL index in S.messages.  When we prepend older messages,
+    // every previously-derived tool's assistant_msg_idx becomes stale (it
+    // now points to a message that's been pushed N positions further down).
+    // The derivation is gated on `!S.toolCalls.length` — without a clear
+    // here, derivation skips and old (now-misaligned) tool cards render
+    // onto the WRONG anchors.  Operator-reported regression: "тулзы там
+    // где не должны быть".  Wiping S.toolCalls forces a fresh derivation
+    // against the new S.messages indices.
+    S.toolCalls = [];
     // renderMessages() windows long transcripts from the end. If we do not
     // expand that window before rendering, the newly prepended page stays
     // hidden and the "hidden" counter rises while the viewport appears stuck.
