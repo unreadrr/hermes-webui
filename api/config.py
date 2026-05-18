@@ -2947,6 +2947,8 @@ def get_available_models() -> dict:
                 detected_providers.add("minimax-cn")
             if all_env.get("DEEPSEEK_API_KEY"):
                 detected_providers.add("deepseek")
+            if all_env.get("FIREWORKS_API_KEY"):
+                detected_providers.add("fireworks")
             if all_env.get("XIAOMI_API_KEY"):
                 detected_providers.add("xiaomi")
             if all_env.get("XAI_API_KEY"):
