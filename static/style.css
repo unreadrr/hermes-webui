@@ -1647,6 +1647,26 @@
     transform:rotate(90deg);
     opacity:.85;
   }
+  /* M3 tool-card detail (body) — only visible when .open, with
+   * hairline divider above and proper inset. */
+  :root[data-skin="cream"] .tool-card-detail{
+    padding:0 14px;
+    max-height:0;
+    overflow:hidden;
+    transition:max-height .28s cubic-bezier(.32,.72,.16,1),padding .22s ease,border-top-color .22s ease;
+    border-top:1px solid transparent;
+  }
+  :root[data-skin="cream"] .tool-card.open .tool-card-detail{
+    max-height:600px;
+    padding:12px 14px;
+    border-top-color:var(--border);
+  }
+  /* Thinking dots — wave motion, accent color */
+  :root[data-skin="cream"] .dot{
+    background:var(--accent);
+    width:6px;
+    height:6px;
+  }
   :root.dark[data-skin="cream"] .tool-card{
     background:rgba(255,248,238,0.04);
     box-shadow:0 1px 2px rgba(0,0,0,0.45);
