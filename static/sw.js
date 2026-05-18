@@ -32,8 +32,6 @@
 //  M3 approval card + queue card softer corners +
 //  M3 send-FAB 40x40 with proper elevation +
 //  M3 nav rail with filled active pill +
-//  fix duplicate tool cards on cancelled turns) — bump.
-const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-tool-dedup';
 //  M3 assistant turn surface container +
 //  M3 typography scale (h1/h2/h3, lists, blockquote) +
 //  M3 tool-card surfaces in Activity body + composer textarea polish +
@@ -57,8 +55,9 @@ const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-tool-dedup';
 //  M3 user bubble consolidated (single source of truth) +
 //  composer floating pill (max-width 780, centered, fade gradient) +
 //  tool-card hierarchy in Activity group (indent + rhythm) +
-//  M3 right workspace panel (surface tone + softer entries)) — bump.
-const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-rightpanel';
+//  M3 right workspace panel (surface tone + softer entries) +
+//  fix duplicate tool cards on cancelled turns) — bump.
+const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-rightpanel-tooldedup';
 
 // Static assets that form the app shell.
 //
