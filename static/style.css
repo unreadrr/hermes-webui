@@ -1181,11 +1181,16 @@
     display:flex;
     align-items:center;
     flex-wrap:wrap;
-    gap:6px;
+    gap:8px;
     padding:10px 24px 12px;
-    border-bottom:1px solid var(--border-subtle,var(--border));
-    background:var(--bg);
+    border-bottom:1px solid var(--border);
+    background:var(--surface);
     flex-shrink:0;
+    position:relative;
+    z-index:5;
+  }
+  :root.dark[data-skin="cream"] #creamM3Topbar{
+    background:rgba(255,248,238,0.025);
   }
   :root[data-skin="cream"] #creamM3Topbar:empty{
     display:none;
