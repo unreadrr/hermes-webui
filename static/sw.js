@@ -32,7 +32,8 @@
 //  M3 approval card + queue card softer corners +
 //  M3 send-FAB 40x40 with proper elevation +
 //  M3 nav rail with filled active pill +
-//  M3 structural chat rewrite (bubble corners, avatar grid, tool header) +
+//  fix duplicate tool cards on cancelled turns) — bump.
+const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-tool-dedup';
 //  M3 assistant turn surface container +
 //  M3 typography scale (h1/h2/h3, lists, blockquote) +
 //  M3 tool-card surfaces in Activity body + composer textarea polish +

@@ -6046,12 +6046,26 @@ function renderMessages(options){
       // the entire derivation pass skips them and a stopped turn appears to
       // have lost its tools entirely on session reload.  Bug user described as
       // "interrupt стирает всё нахер".
+      //
+      // CRITICAL: backend stores ALL streamed tool_calls in _partial_tool_calls
+      // (both completed and truly-partial), so we MUST de-dup against the tids
+      // we already emitted from m.content above — otherwise every cancelled
+      // turn renders its tools twice, with the duplicates clumped under the
+      // partial-msg index at the end of the chat.  User-reported regression:
+      // "тулзы собрались в один огромный такой список в конце".
       if(Array.isArray(m._partial_tool_calls)){
+        const _seenTids=new Set();
+        derived.forEach(d=>{ if(d.tid) _seenTids.add(d.tid); });
         m._partial_tool_calls.forEach((tc,tcIdx)=>{
           if(!tc||typeof tc!=='object') return;
+          const tid=tc.tid||`partial-${rawIdx}-${tcIdx}`;
+          // De-dup: skip if this tool was already added via m.content
+          // (i.e. completed tool_use block).  Only render true partials —
+          // tools whose call exists in _partial_tool_calls but has no
+          // matching tool_use entry in any prior message.
+          if(tc.tid && _seenTids.has(tc.tid)) return;
           const name=tc.name||'tool';
           const args=tc.args||{};
-          const tid=tc.tid||`partial-${rawIdx}-${tcIdx}`;
           const argsSnap={};
           if(args && typeof args==='object'){
             Object.keys(args).slice(0,4).forEach(k=>{ const v=String(args[k]); argsSnap[k]=v.slice(0,120)+(v.length>120?'...':''); });
