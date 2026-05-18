@@ -6100,32 +6100,15 @@ function renderMessages(options){
     }
     const assistantIdxs=[...assistantSegments.keys()].sort((a,b)=>a-b);
     const anchorInsertAfter = new Map();
-    // personal: paginated load defers some assistant rows.  Only render tool
-    // groups whose anchor row is currently in the DOM.  Bailing on the old
-    // catch-all fallback that collapsed every unanchored aIdx onto the LAST
-    // loaded assistant — that produced "all tools clumped at the end" when
-    // 400+ anchors lived above the loaded window.  When the user scrolls up
-    // and load-older fires, renderMessages re-runs and these orphans get
-    // rendered onto their proper anchor segments.
-    const _maxLoadedAIdx = assistantIdxs.length ? assistantIdxs[assistantIdxs.length-1] : -1;
-    const _minLoadedAIdx = assistantIdxs.length ? assistantIdxs[0] : -1;
     if(isSimplifiedToolCalling()){
       const activityIdxs=[...new Set([...Object.keys(byAssistant).map(k=>parseInt(k)), ...assistantThinking.keys()])].sort((a,b)=>a-b);
       for(const aIdx of activityIdxs){
         const cards=byAssistant[aIdx]||[];
         let anchorRow=assistantSegments.get(aIdx)||null;
-        if(!anchorRow){
-          // No exact match.  Skip if the anchor lives outside the
-          // currently-loaded window (older or newer); pagination will
-          // re-render us when its segment shows up.  Only fall back to
-          // the closest backward anchor when aIdx is BETWEEN loaded
-          // indices (gap inside the loaded range — should be rare since
-          // assistantSegments fills every loaded assistant).
-          if(!assistantIdxs.length) continue;
-          if(aIdx<_minLoadedAIdx||aIdx>_maxLoadedAIdx) continue;
+        if(!anchorRow&&assistantIdxs.length){
+          if(aIdx<assistantIdxs[0]) continue;
           const fallbackIdx=[...assistantIdxs].reverse().find(idx=>idx<=aIdx);
-          if(fallbackIdx===undefined) continue;
-          anchorRow=assistantSegments.get(fallbackIdx);
+          anchorRow=fallbackIdx!==undefined?assistantSegments.get(fallbackIdx):assistantSegments.get(assistantIdxs[assistantIdxs.length-1]);
         }
         if(!anchorRow) continue;
         const anchorParent=anchorRow.parentElement;
@@ -6151,13 +6134,10 @@ function renderMessages(options){
       for(const [key, cards] of Object.entries(byAssistant)){
         const aIdx = parseInt(key);
         let anchorRow=assistantSegments.get(aIdx)||null;
-        if(!anchorRow){
-          // Same paginated-anchor guard as the simplified branch above.
-          if(!assistantIdxs.length) continue;
-          if(aIdx<_minLoadedAIdx||aIdx>_maxLoadedAIdx) continue;
+        if(!anchorRow&&assistantIdxs.length){
+          if(aIdx<assistantIdxs[0]) continue;
           const fallbackIdx=[...assistantIdxs].reverse().find(idx=>idx<=aIdx);
-          if(fallbackIdx===undefined) continue;
-          anchorRow=assistantSegments.get(fallbackIdx);
+          anchorRow=fallbackIdx!==undefined?assistantSegments.get(fallbackIdx):assistantSegments.get(assistantIdxs[assistantIdxs.length-1]);
         }
         if(!anchorRow) continue;
         const anchorParent=anchorRow.parentElement;

@@ -56,9 +56,8 @@
 //  composer floating pill (max-width 780, centered, fade gradient) +
 //  tool-card hierarchy in Activity group (indent + rhythm) +
 //  M3 right workspace panel (surface tone + softer entries) +
-//  fix duplicate tool cards on cancelled turns +
-//  fix tool-clump-at-end on paginated history (skip unanchored aIdx)) — bump.
-const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-tool-anchor-fix';
+//  fix duplicate tool cards on cancelled turns) — bump.
+const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-rightpanel-tooldedup';
 
 // Static assets that form the app shell.
 //
