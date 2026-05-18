@@ -1217,7 +1217,53 @@
     display:none;
   }
   :root[data-skin="cream"] #creamM3Topbar .cream-m3-relocated{
-    /* Items keep their original styling; topbar is just a host */
+    /* Force chip-style on every relocated item, regardless of where
+     * it came from in the composer.  The composer footer originally
+     * gave them transparent backgrounds — bring them up to M3 chip
+     * spec when they live in the topbar. */
+    border-radius:999px !important;
+    padding:6px 14px !important;
+    font-size:12px !important;
+    font-weight:500;
+    background:var(--surface-2,rgba(62,44,28,0.10)) !important;
+    border:1px solid var(--border) !important;
+    transition:background .15s,border-color .15s,transform .12s !important;
+    line-height:1.4;
+    min-height:28px;
+    cursor:pointer;
+  }
+  :root.dark[data-skin="cream"] #creamM3Topbar .cream-m3-relocated{
+    background:rgba(255,248,238,0.06) !important;
+  }
+  :root[data-skin="cream"] #creamM3Topbar .cream-m3-relocated:hover{
+    background:var(--accent-bg) !important;
+    border-color:var(--accent-bg-strong) !important;
+    transform:translateY(-1px);
+  }
+  :root[data-skin="cream"] #creamM3Topbar .cream-m3-relocated:active{
+    transform:scale(.97);
+  }
+  /* yolo-pill keeps its amber alert color but gets pill polish */
+  :root[data-skin="cream"] #creamM3Topbar .yolo-pill.cream-m3-relocated{
+    background:rgba(245,158,11,0.18) !important;
+    border-color:rgba(245,158,11,0.4) !important;
+  }
+  :root[data-skin="cream"] #creamM3Topbar .yolo-pill.cream-m3-relocated:hover{
+    background:rgba(245,158,11,0.28) !important;
+    border-color:rgba(245,158,11,0.55) !important;
+  }
+  /* ctx indicator stays as a 32x32 round button, not a pill */
+  :root[data-skin="cream"] #creamM3Topbar .ctx-indicator-wrap.cream-m3-relocated{
+    border-radius:50% !important;
+    padding:0 !important;
+    width:32px;
+    background:transparent !important;
+    border:0 !important;
+    min-height:32px;
+  }
+  :root[data-skin="cream"] #creamM3Topbar .ctx-indicator-wrap.cream-m3-relocated:hover{
+    background:var(--surface-2,rgba(62,44,28,0.12)) !important;
+    transform:none;
   }
   /* Chat content max-width — match mockup's 760px centered column.
    * Default --msg-max is 780, slightly bumped to give bubbles breathing room. */
