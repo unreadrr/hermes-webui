@@ -445,6 +445,46 @@
   :root[data-skin="cream"] .msg-row[data-role="assistant"] .msg-role{
     gap:10px;
   }
+  /* M3 panel-head-btn — round icon button with state layer */
+  :root[data-skin="cream"] .panel-head-btn{
+    width:40px;
+    height:40px;
+    border-radius:50%;
+    background:transparent;
+    border:0;
+    color:var(--muted);
+    transition:background .15s,color .15s,transform .12s;
+  }
+  :root[data-skin="cream"] .panel-head-btn:hover{
+    background:var(--surface-2,rgba(62,44,28,0.08));
+    color:var(--text);
+  }
+  :root.dark[data-skin="cream"] .panel-head-btn:hover{
+    background:rgba(255,248,238,0.08);
+  }
+  :root[data-skin="cream"] .panel-head-btn:active{
+    transform:scale(.92);
+  }
+  /* M3 project-bar (All / Unassigned / +) — pill chips, evenly spaced */
+  :root[data-skin="cream"] .project-bar{
+    padding:8px 12px;
+    gap:6px;
+  }
+  /* Project chips already have cream styling at line ~1058; just add
+   * the not-active variant the alignment with sibling search bar. */
+  :root[data-skin="cream"] .project-chip:not(.active){
+    background:transparent;
+    border:1px solid var(--border);
+    color:var(--muted);
+  }
+  :root[data-skin="cream"] .project-chip:not(.active):hover{
+    background:var(--surface-2,rgba(62,44,28,0.06));
+    border-color:var(--border2);
+    color:var(--text);
+  }
+  :root.dark[data-skin="cream"] .project-chip:not(.active):hover{
+    background:rgba(255,248,238,0.06);
+  }
   /* M3 sidebar search — proper SearchBar (40dp height, 20dp radius,
    * leading icon 18px sized into 32px hit area, surface-2 fill). */
   :root[data-skin="cream"] .sidebar-search{
