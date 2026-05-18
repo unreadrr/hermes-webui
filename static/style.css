@@ -1586,6 +1586,67 @@
     border-radius:14px;
     box-shadow:0 1px 2px rgba(62,44,28,0.06),0 1px 3px rgba(62,44,28,0.10);
   }
+  /* M3 tool card header — proper grid layout: icon | name+preview | chevron */
+  :root[data-skin="cream"] .tool-card-header{
+    display:grid;
+    grid-template-columns:auto 1fr auto;
+    align-items:center;
+    gap:10px;
+    padding:10px 14px;
+    cursor:pointer;
+    user-select:none;
+    min-width:0;
+  }
+  :root[data-skin="cream"] .tool-card-icon{
+    width:28px;
+    height:28px;
+    border-radius:8px;
+    background:var(--accent-bg);
+    color:var(--accent-text);
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    flex-shrink:0;
+  }
+  :root[data-skin="cream"] .tool-card-name{
+    font-size:13px;
+    font-weight:600;
+    color:var(--text);
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    min-width:0;
+  }
+  :root[data-skin="cream"] .tool-card-preview{
+    font-family:"JetBrains Mono","SF Mono",ui-monospace,monospace;
+    font-size:12px;
+    color:var(--muted);
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    grid-column:2 / span 1;
+    grid-row:2;
+    margin-top:2px;
+  }
+  /* Chevron via ::after — DOM doesn't include it */
+  :root[data-skin="cream"] .tool-card-header::after{
+    content:'';
+    width:14px;
+    height:14px;
+    background-color:currentColor;
+    color:var(--muted);
+    opacity:.55;
+    -webkit-mask:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='9 18 15 12 9 6'/></svg>") no-repeat center/contain;
+    mask:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='9 18 15 12 9 6'/></svg>") no-repeat center/contain;
+    transition:transform .2s,opacity .15s;
+    flex-shrink:0;
+    grid-column:3;
+    grid-row:1 / span 2;
+  }
+  :root[data-skin="cream"] .tool-card.open .tool-card-header::after{
+    transform:rotate(90deg);
+    opacity:.85;
+  }
   :root.dark[data-skin="cream"] .tool-card{
     background:rgba(255,248,238,0.04);
     box-shadow:0 1px 2px rgba(0,0,0,0.45);
