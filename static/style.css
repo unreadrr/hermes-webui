@@ -1484,10 +1484,39 @@
     padding-right:6px;
     margin-top:4px;
   }
-  /* Tool card refinement — softer radius, stronger hover lift */
-  :root[data-skin="cream"] .tool-card{border-radius:14px;}
-  :root[data-skin="cream"] .tool-card:hover{box-shadow:0 2px 6px rgba(62,44,28,0.10);}
-  :root.dark[data-skin="cream"] .tool-card:hover{box-shadow:0 2px 6px rgba(0,0,0,0.40);}
+  /* M3 tool card surface elevation — pop above the chat canvas */
+  :root[data-skin="cream"] .tool-card{
+    background:var(--surface-1,var(--surface));
+    border:1px solid var(--border);
+    border-radius:14px;
+    box-shadow:0 1px 2px rgba(62,44,28,0.06);
+  }
+  :root.dark[data-skin="cream"] .tool-card{
+    background:rgba(255,248,238,0.04);
+    box-shadow:0 1px 2px rgba(0,0,0,0.4);
+  }
+  :root[data-skin="cream"] .tool-card:hover{
+    border-color:var(--border2);
+    box-shadow:0 2px 6px rgba(62,44,28,0.10),0 4px 14px rgba(62,44,28,0.06);
+  }
+  :root.dark[data-skin="cream"] .tool-card:hover{
+    background:rgba(255,248,238,0.06);
+    box-shadow:0 2px 6px rgba(0,0,0,0.45),0 4px 14px rgba(0,0,0,0.30);
+  }
+  /* Tool card running — accent halo + shimmer */
+  :root[data-skin="cream"] .tool-card.tool-card-running{
+    border-color:var(--accent-bg-strong);
+    background:var(--accent-bg);
+    box-shadow:0 0 0 1px var(--accent-bg-strong),0 2px 6px rgba(62,44,28,0.10);
+  }
+  :root.dark[data-skin="cream"] .tool-card.tool-card-running{
+    background:rgba(229,192,137,0.08);
+  }
+  /* Activity group container — keep transparent so individual cards' elevation reads */
+  :root[data-skin="cream"] .tool-call-group{
+    background:transparent;
+    border-left:0;
+  }
   /* M3 message actions — always faintly visible, full opacity on hover.
    * Operator complaint: clean look, but copy/retry/fork buttons should be
    * discoverable without hovering each row.  Mockup approach: opacity .7
