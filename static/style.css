@@ -1526,38 +1526,58 @@
     padding-right:6px;
     margin-top:4px;
   }
-  /* M3 tool card surface elevation — pop above the chat canvas */
+  /* M3 tool card surface elevation — pop above the chat canvas.
+   * Use shadow-only (no border) so the surface reads as a true M3
+   * elevated card, not a bordered container. */
   :root[data-skin="cream"] .tool-card{
     background:var(--surface-1,var(--surface));
-    border:1px solid var(--border);
+    border:1px solid transparent;
     border-radius:14px;
-    box-shadow:0 1px 2px rgba(62,44,28,0.06);
+    box-shadow:0 1px 2px rgba(62,44,28,0.06),0 1px 3px rgba(62,44,28,0.10);
   }
   :root.dark[data-skin="cream"] .tool-card{
     background:rgba(255,248,238,0.04);
-    box-shadow:0 1px 2px rgba(0,0,0,0.4);
+    box-shadow:0 1px 2px rgba(0,0,0,0.45);
   }
   :root[data-skin="cream"] .tool-card:hover{
-    border-color:var(--border2);
+    border-color:transparent;
     box-shadow:0 2px 6px rgba(62,44,28,0.10),0 4px 14px rgba(62,44,28,0.06);
   }
   :root.dark[data-skin="cream"] .tool-card:hover{
     background:rgba(255,248,238,0.06);
-    box-shadow:0 2px 6px rgba(0,0,0,0.45),0 4px 14px rgba(0,0,0,0.30);
+    box-shadow:0 2px 6px rgba(0,0,0,0.50),0 4px 14px rgba(0,0,0,0.30);
   }
   /* Tool card running — accent halo + shimmer */
   :root[data-skin="cream"] .tool-card.tool-card-running{
-    border-color:var(--accent-bg-strong);
+    border-color:transparent;
     background:var(--accent-bg);
     box-shadow:0 0 0 1px var(--accent-bg-strong),0 2px 6px rgba(62,44,28,0.10);
   }
   :root.dark[data-skin="cream"] .tool-card.tool-card-running{
-    background:rgba(229,192,137,0.08);
+    background:rgba(229,192,137,0.10);
+    box-shadow:0 0 0 1px rgba(229,192,137,0.30),0 2px 6px rgba(0,0,0,0.45);
   }
   /* Activity group container — keep transparent so individual cards' elevation reads */
   :root[data-skin="cream"] .tool-call-group{
     background:transparent;
     border-left:0;
+  }
+  /* M3 app-titlebar — quieter, surface-1 fill, no accent loud-ness */
+  :root[data-skin="cream"] .app-titlebar{
+    background:var(--surface);
+    color:var(--muted);
+    border-bottom-color:var(--border);
+  }
+  :root.dark[data-skin="cream"] .app-titlebar{
+    background:rgba(255,248,238,0.025);
+  }
+  :root[data-skin="cream"] .app-titlebar-icon{
+    color:var(--muted);
+    opacity:.6;
+  }
+  :root[data-skin="cream"] .app-titlebar-title{
+    color:var(--text);
+    font-weight:500;
   }
   /* M3 message actions — always faintly visible, full opacity on hover.
    * Operator complaint: clean look, but copy/retry/fork buttons should be
