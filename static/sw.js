@@ -54,8 +54,9 @@
 //  M3 narrower chat column + activity group polish +
 //  M3 DOM rewrite — chips moved to topbar via cream-m3.js +
 //  M3 user bubble consolidated (single source of truth) +
-//  composer floating pill (max-width 780, centered, fade gradient)) — bump.
-const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-composer-pill';
+//  composer floating pill (max-width 780, centered, fade gradient) +
+//  tool-card hierarchy in Activity group (indent + rhythm)) — bump.
+const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-tool-hierarchy';
 
 // Static assets that form the app shell.
 //
