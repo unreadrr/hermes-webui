@@ -4762,6 +4762,69 @@ function msgContent(m){
   return String(c).trim();
 }
 
+// personal: parts-array migration helpers (~/.hermes/plans/parts-array-migration.md).
+// Single source of truth for walking message content regardless of whether
+// it's stored as a flat string (legacy OpenAI shape) or as an Anthropic-style
+// parts array (new shape).  Mirrors api/helpers.py:msg_content_parts.
+//
+// Schema:
+//   {type:'text',     text}
+//   {type:'tool_use', id, name, input}
+//   {type:'reasoning',text}
+//   {type:'image',    ...}
+//
+// All readers should use this instead of branching on Array.isArray(m.content).
+// Legacy data on disk is never migrated; helpers synthesize parts on the fly.
+function msgContentParts(m){
+  if(!m||typeof m!=='object') return [];
+  const c = m.content;
+  if(Array.isArray(c)) return c;
+  const parts = [];
+  if(typeof c === 'string' && c){
+    parts.push({type:'text', text:c});
+  }else if(c && typeof c === 'object' && c._multimodal){
+    const ts = c.text_summary;
+    if(ts) parts.push({type:'text', text:ts});
+  }
+  if(m.reasoning && !parts.some(p => p && p.type === 'reasoning')){
+    parts.push({type:'reasoning', text: String(m.reasoning)});
+  }
+  if(Array.isArray(m.tool_calls)){
+    for(const tc of m.tool_calls){
+      if(!tc || typeof tc !== 'object') continue;
+      const fn = tc.function || {};
+      let args = {};
+      try{
+        if(typeof fn.arguments === 'string') args = JSON.parse(fn.arguments || '{}');
+        else if(fn.arguments && typeof fn.arguments === 'object') args = fn.arguments;
+      }catch(_){
+        args = {_raw: fn.arguments};
+      }
+      parts.push({
+        type:'tool_use',
+        id: tc.id || tc.call_id || '',
+        name: fn.name || tc.name || '',
+        input: args,
+      });
+    }
+  }
+  return parts;
+}
+
+// Concatenate only text/reasoning parts for plain-string consumers.
+function msgTextOnly(m){
+  return msgContentParts(m)
+    .filter(p => p && (p.type === 'text' || p.type === 'reasoning'))
+    .map(p => p.text || '')
+    .join('\n')
+    .trim();
+}
+
+// Return tool_use parts in original order.
+function msgToolUses(m){
+  return msgContentParts(m).filter(p => p && p.type === 'tool_use');
+}
+
 function _fmtDateSep(d){
   const todayStart=new Date();todayStart.setHours(0,0,0,0);
   const dStart=new Date(d);dStart.setHours(0,0,0,0);

@@ -8,6 +8,102 @@ from pathlib import Path
 from api.config import IMAGE_EXTS, MD_EXTS
 
 
+# ──────────────────────────────────────────────────────────────────────
+# Message content parts helper
+# ──────────────────────────────────────────────────────────────────────
+# personal: parts-array migration (handoff: ~/.hermes/plans/parts-array-migration.md).
+# Provides a single source of truth for walking message content regardless
+# of whether it's stored as a flat string (legacy) or as an Anthropic-style
+# parts array (new shape).
+#
+# All readers that need to enumerate text/tool_use/reasoning blocks should
+# call msg_content_parts(msg) instead of branching on type.  Legacy data
+# never gets migrated on disk — this helper synthesizes parts on the fly.
+#
+# Schema (assistant-ui-aligned):
+#   {"type": "text",      "text": "..."}
+#   {"type": "tool_use",  "id": "...", "name": "...", "input": {...}}
+#   {"type": "reasoning", "text": "..."}
+#   {"type": "image",     ...}
+#   {"type": "tool_result", "tool_use_id": "...", "content": ...}  (user msgs)
+#
+# Old shape:
+#   {"role": "assistant", "content": "flat string", "tool_calls": [...]}
+# Synthesized into:
+#   [{"type": "text", "text": "flat string"},
+#    {"type": "tool_use", "id": ..., "name": ..., "input": ...}, ...]
+def msg_content_parts(msg) -> list:
+    """Return message content as an ordered parts list, synthesizing from
+    the legacy {content:str, tool_calls:[...]} shape when needed.
+
+    Preserves order: text always comes first when synthesizing legacy data,
+    followed by tool_uses derived from tool_calls in their original order.
+    For native parts-array messages (Anthropic, Codex Responses), returns
+    the array as-is.
+
+    Returns [] for messages with no extractable content.
+    """
+    if not isinstance(msg, dict):
+        return []
+    c = msg.get("content")
+    # Native parts array — pass through unchanged.
+    if isinstance(c, list):
+        return c
+    # Legacy string content → synthesize.
+    parts: list = []
+    if isinstance(c, str) and c:
+        parts.append({"type": "text", "text": c})
+    elif isinstance(c, dict) and c.get("_multimodal"):
+        # Multimodal stash format used by some adapters; surface text only.
+        text_summary = c.get("text_summary")
+        if text_summary:
+            parts.append({"type": "text", "text": text_summary})
+    # Reasoning is sometimes attached separately; emit it BEFORE tool_use
+    # so the chronological mental model holds.
+    reasoning = msg.get("reasoning")
+    if reasoning and not any(p.get("type") == "reasoning" for p in parts if isinstance(p, dict)):
+        parts.append({"type": "reasoning", "text": str(reasoning)})
+    # OpenAI-format tool_calls → tool_use parts.
+    for tc in msg.get("tool_calls") or []:
+        if not isinstance(tc, dict):
+            continue
+        fn = tc.get("function") or {}
+        try:
+            args = _json.loads(fn.get("arguments") or "{}") if isinstance(fn.get("arguments"), str) else (fn.get("arguments") or {})
+        except (_json.JSONDecodeError, TypeError):
+            args = {"_raw": fn.get("arguments")}
+        parts.append({
+            "type": "tool_use",
+            "id": tc.get("id") or tc.get("call_id") or "",
+            "name": fn.get("name") or tc.get("name") or "",
+            "input": args,
+        })
+    return parts
+
+
+def msg_text_only(msg) -> str:
+    """Concatenate text-type parts from a message into a flat string.
+
+    For gateway/CLI egress where the receiver expects plain text and tool
+    metadata isn't useful (telegram, discord, etc.).  Drops everything that
+    isn't a text or reasoning block.
+    """
+    parts = msg_content_parts(msg)
+    return "\n".join(
+        p.get("text") or ""
+        for p in parts
+        if isinstance(p, dict) and p.get("type") in ("text", "reasoning")
+    ).strip()
+
+
+def msg_tool_uses(msg) -> list:
+    """Return all tool_use parts from a message in original order."""
+    return [
+        p for p in msg_content_parts(msg)
+        if isinstance(p, dict) and p.get("type") == "tool_use"
+    ]
+
+
 def require(body: dict, *fields) -> None:
     """Phase D: Validate required fields. Raises ValueError with clean message."""
     missing = [f for f in fields if not body.get(f) and body.get(f) != 0]

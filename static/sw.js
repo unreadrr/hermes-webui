@@ -58,8 +58,9 @@
 //  M3 right workspace panel (surface tone + softer entries) +
 //  fix duplicate tool cards on cancelled turns +
 //  fix tool-clump-at-end on paginated history (skip unanchored aIdx) +
-//  clear S.toolCalls on prepend (re-derive against new indices)) — bump.
-const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-tool-prepend-clear';
+//  clear S.toolCalls on prepend (re-derive against new indices) +
+//  parts-array Phase 1: msg content helpers (no behavior change yet)) — bump.
+const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-parts-helpers';
 
 // Static assets that form the app shell.
 //
