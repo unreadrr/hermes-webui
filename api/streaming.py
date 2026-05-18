@@ -3813,6 +3813,26 @@ def _run_agent_streaming(
             if _process_notifications:
                 _agent_msg_text = "\n\n".join([*_process_notifications, msg_text]).strip()
             user_message = _build_native_multimodal_message(workspace_ctx, _agent_msg_text, attachments, workspace, cfg=_cfg)
+            # personal: seed the freshly-built agent's context_compressor with the
+            # last persisted prompt-token count from the session.  Without this,
+            # every WebUI message creates a new AIAgent with last_prompt_tokens=0,
+            # so preflight compression falls back to the rough str(messages)/4
+            # estimate which inflates 3-6x on tool-heavy sessions.  Operator-
+            # observed regression: UI shows 108k tokens (real) but backend
+            # reports 600k+ (rough) → preflight triggers spurious compression
+            # at the new 180k threshold.  Seeding `last_prompt_tokens` makes
+            # preflight read the real provider-reported count instead.
+            try:
+                _seed_lpt = int(getattr(s, "last_prompt_tokens", 0) or 0)
+                if _seed_lpt > 0 and getattr(agent, "context_compressor", None) is not None:
+                    if not getattr(agent.context_compressor, "last_prompt_tokens", 0):
+                        agent.context_compressor.last_prompt_tokens = _seed_lpt
+                        logger.info(
+                            "Seeded compressor.last_prompt_tokens=%s from persisted session for %s",
+                            f"{_seed_lpt:,}", session_id,
+                        )
+            except Exception as _seed_err:
+                logger.debug("seed last_prompt_tokens failed: %s", _seed_err)
             result = agent.run_conversation(
                 user_message=user_message,
                 system_message=workspace_system_msg,
