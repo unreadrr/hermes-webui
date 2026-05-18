@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Add Fireworks AI to the WebUI provider catalog. The provider tile now renders in **Settings → Providers** (with a `FIREWORKS_API_KEY` env-var slot) and the composer-footer model picker surfaces the curated catalog — GLM-5.1 (`accounts/fireworks/models/glm-5p1`), DeepSeek V4 Pro, Kimi K2.6 / K2.5, and gpt-oss-120b — augmented by live `/v1/models` discovery when the key is present. Detection wires through three small additions: `_PROVIDER_DISPLAY["fireworks"]`, `_PROVIDER_MODELS["fireworks"]`, `_PROVIDER_ENV_VAR["fireworks"]`, plus an `FIREWORKS_API_KEY` branch in `get_available_models()`'s env-key detection ladder so the provider lands in `detected_providers` and a group is built for the picker. Pairs with the matching `FireworksProfile` plugin in `unreadrr/hermes-agent#1` which handles credential resolution and `reasoning_effort` translation at the agent layer; this PR is webui-only.
+
 ## [v0.51.82] — 2026-05-17 — Release BF (stage-375 — 2-PR batch — table renderer pipe protection + Catppuccin appearance skin)
 
 ### Added

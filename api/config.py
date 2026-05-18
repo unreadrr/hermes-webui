@@ -695,6 +695,7 @@ _PROVIDER_DISPLAY = {
     "zai": "Z.AI / GLM",
     "kimi-coding": "Kimi / Moonshot",
     "deepseek": "DeepSeek",
+    "fireworks": "Fireworks AI",
     "minimax": "MiniMax",
     "minimax-cn": "MiniMax (China)",
     "google": "Google",
@@ -1024,6 +1025,13 @@ _PROVIDER_MODELS = {
         {"id": "deepseek-v4-pro", "label": "DeepSeek V4 Pro"},
         {"id": "deepseek-chat-v3-0324", "label": "DeepSeek V3 (legacy)"},
         {"id": "deepseek-reasoner", "label": "DeepSeek Reasoner (legacy)"},
+    ],
+    "fireworks": [
+        {"id": "accounts/fireworks/models/glm-5p1", "label": "GLM-5.1 (Fireworks)"},
+        {"id": "accounts/fireworks/models/deepseek-v4-pro", "label": "DeepSeek V4 Pro (Fireworks)"},
+        {"id": "accounts/fireworks/models/kimi-k2p6", "label": "Kimi K2.6 (Fireworks)"},
+        {"id": "accounts/fireworks/models/kimi-k2p5", "label": "Kimi K2.5 (Fireworks)"},
+        {"id": "accounts/fireworks/models/gpt-oss-120b", "label": "gpt-oss-120b (Fireworks)"},
     ],
     "nous": [
         {"id": "@nous:anthropic/claude-opus-4.6",     "label": "Claude Opus 4.6 (via Nous)"},
@@ -2939,6 +2947,8 @@ def get_available_models() -> dict:
                 detected_providers.add("minimax-cn")
             if all_env.get("DEEPSEEK_API_KEY"):
                 detected_providers.add("deepseek")
+            if all_env.get("FIREWORKS_API_KEY"):
+                detected_providers.add("fireworks")
             if all_env.get("XIAOMI_API_KEY"):
                 detected_providers.add("xiaomi")
             if all_env.get("XAI_API_KEY"):
