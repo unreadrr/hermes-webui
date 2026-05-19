@@ -2014,10 +2014,13 @@ def _restore_reasoning_metadata(previous_messages, updated_messages):
 
 
 def _session_context_messages(session):
-    """Return model-facing history without assuming it matches the UI transcript."""
-    context_messages = getattr(session, 'context_messages', None)
-    if isinstance(context_messages, list) and context_messages:
-        return context_messages
+    """Return model-facing history without assuming it matches the UI transcript.
+    
+    CRITICAL: context_messages is the full pre-compression archive for UI
+    rendering only.  The model must receive the compressed messages[] — 
+    otherwise compression is invisible to the API and every post-compression
+    turn re-sends the full 140K+ transcript.
+    """
     return session.messages or []
 
 
@@ -3764,6 +3767,11 @@ def _run_agent_streaming(
             _turn_started_at = _pending_started_at if _pending_started_at else time.time()
             _previous_messages = list(s.messages or [])
             _previous_context_messages = _context_messages_for_new_turn(s, msg_text)
+            _diag_sess_len = len(s.messages or [])
+            _diag_arch_len = len(getattr(s, 'context_messages', None) or [])
+            _diag_ctx_len = len(_previous_context_messages)
+            _diag_tok_est = sum(len(str(m.get('content',''))) // 4 for m in _previous_context_messages)
+            logger.info("DIAG-STREAM: session.messages=%d, context_messages=%d, api_history=%d msgs ~%d tok", _diag_sess_len, _diag_arch_len, _diag_ctx_len, _diag_tok_est)
             _pre_compression_count = getattr(
                 getattr(agent, 'context_compressor', None),
                 'compression_count', 0,
