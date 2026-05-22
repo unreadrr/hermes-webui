@@ -8,6 +8,102 @@ from pathlib import Path
 from api.config import IMAGE_EXTS, MD_EXTS
 
 
+# ──────────────────────────────────────────────────────────────────────
+# Message content parts helper
+# ──────────────────────────────────────────────────────────────────────
+# personal: parts-array migration (handoff: ~/.hermes/plans/parts-array-migration.md).
+# Provides a single source of truth for walking message content regardless
+# of whether it's stored as a flat string (legacy) or as an Anthropic-style
+# parts array (new shape).
+#
+# All readers that need to enumerate text/tool_use/reasoning blocks should
+# call msg_content_parts(msg) instead of branching on type.  Legacy data
+# never gets migrated on disk — this helper synthesizes parts on the fly.
+#
+# Schema (assistant-ui-aligned):
+#   {"type": "text",      "text": "..."}
+#   {"type": "tool_use",  "id": "...", "name": "...", "input": {...}}
+#   {"type": "reasoning", "text": "..."}
+#   {"type": "image",     ...}
+#   {"type": "tool_result", "tool_use_id": "...", "content": ...}  (user msgs)
+#
+# Old shape:
+#   {"role": "assistant", "content": "flat string", "tool_calls": [...]}
+# Synthesized into:
+#   [{"type": "text", "text": "flat string"},
+#    {"type": "tool_use", "id": ..., "name": ..., "input": ...}, ...]
+def msg_content_parts(msg) -> list:
+    """Return message content as an ordered parts list, synthesizing from
+    the legacy {content:str, tool_calls:[...]} shape when needed.
+
+    Preserves order: text always comes first when synthesizing legacy data,
+    followed by tool_uses derived from tool_calls in their original order.
+    For native parts-array messages (Anthropic, Codex Responses), returns
+    the array as-is.
+
+    Returns [] for messages with no extractable content.
+    """
+    if not isinstance(msg, dict):
+        return []
+    c = msg.get("content")
+    # Native parts array — pass through unchanged.
+    if isinstance(c, list):
+        return c
+    # Legacy string content → synthesize.
+    parts: list = []
+    if isinstance(c, str) and c:
+        parts.append({"type": "text", "text": c})
+    elif isinstance(c, dict) and c.get("_multimodal"):
+        # Multimodal stash format used by some adapters; surface text only.
+        text_summary = c.get("text_summary")
+        if text_summary:
+            parts.append({"type": "text", "text": text_summary})
+    # Reasoning is sometimes attached separately; emit it BEFORE tool_use
+    # so the chronological mental model holds.
+    reasoning = msg.get("reasoning")
+    if reasoning and not any(p.get("type") == "reasoning" for p in parts if isinstance(p, dict)):
+        parts.append({"type": "reasoning", "text": str(reasoning)})
+    # OpenAI-format tool_calls → tool_use parts.
+    for tc in msg.get("tool_calls") or []:
+        if not isinstance(tc, dict):
+            continue
+        fn = tc.get("function") or {}
+        try:
+            args = _json.loads(fn.get("arguments") or "{}") if isinstance(fn.get("arguments"), str) else (fn.get("arguments") or {})
+        except (_json.JSONDecodeError, TypeError):
+            args = {"_raw": fn.get("arguments")}
+        parts.append({
+            "type": "tool_use",
+            "id": tc.get("id") or tc.get("call_id") or "",
+            "name": fn.get("name") or tc.get("name") or "",
+            "input": args,
+        })
+    return parts
+
+
+def msg_text_only(msg) -> str:
+    """Concatenate text-type parts from a message into a flat string.
+
+    For gateway/CLI egress where the receiver expects plain text and tool
+    metadata isn't useful (telegram, discord, etc.).  Drops everything that
+    isn't a text or reasoning block.
+    """
+    parts = msg_content_parts(msg)
+    return "\n".join(
+        p.get("text") or ""
+        for p in parts
+        if isinstance(p, dict) and p.get("type") in ("text", "reasoning")
+    ).strip()
+
+
+def msg_tool_uses(msg) -> list:
+    """Return all tool_use parts from a message in original order."""
+    return [
+        p for p in msg_content_parts(msg)
+        if isinstance(p, dict) and p.get("type") == "tool_use"
+    ]
+
+
 def require(body: dict, *fields) -> None:
     """Phase D: Validate required fields. Raises ValueError with clean message."""
     missing = [f for f in fields if not body.get(f) and body.get(f) != 0]
@@ -112,7 +208,8 @@ MAX_BODY_BYTES = 20 * 1024 * 1024  # 20MB limit for non-upload POST bodies
 
 def _build_redact_fn():
     """Return a redactor backed by hermes-agent plus local fallback patterns."""
-    # Minimal fallback covering the most common credential prefixes.
+    # Fallback mirrors the agent's known credential prefixes so WebUI API
+    # responses remain a hard redaction boundary even without hermes-agent.
     # Keep this active even when hermes-agent is importable so API responses do
     # not regress if the agent redactor misses a token shape.
     _CRED_RE = _re.compile(
@@ -124,10 +221,34 @@ def _build_redact_fn():
         r"|ghu_[A-Za-z0-9]{10,}"          # GitHub user-to-server token
         r"|ghs_[A-Za-z0-9]{10,}"          # GitHub server-to-server token
         r"|ghr_[A-Za-z0-9]{10,}"          # GitHub refresh token
+        r"|xox[baprs]-[A-Za-z0-9-]{10,}"  # Slack tokens
+        r"|AIza[A-Za-z0-9_-]{30,}"        # Google API keys
+        r"|pplx-[A-Za-z0-9]{10,}"         # Perplexity
+        r"|fal_[A-Za-z0-9_-]{10,}"        # Fal.ai
+        r"|fc-[A-Za-z0-9]{10,}"           # Firecrawl
+        r"|bb_live_[A-Za-z0-9_-]{10,}"    # BrowserBase
+        r"|gAAAA[A-Za-z0-9_=-]{20,}"      # Codex encrypted tokens
         r"|AKIA[A-Z0-9]{16}"              # AWS Access Key ID
-        r"|xox[baprs]-[A-Za-z0-9-]{10,}" # Slack tokens
-        r"|hf_[A-Za-z0-9]{10,}"          # HuggingFace token
-        r"|SG\.[A-Za-z0-9_-]{10,}"       # SendGrid API key
+        r"|sk_live_[A-Za-z0-9]{10,}"      # Stripe secret key (live)
+        r"|sk_test_[A-Za-z0-9]{10,}"      # Stripe secret key (test)
+        r"|rk_live_[A-Za-z0-9]{10,}"      # Stripe restricted key
+        r"|SG\.[A-Za-z0-9_-]{10,}"        # SendGrid API key
+        r"|hf_[A-Za-z0-9]{10,}"           # HuggingFace token
+        r"|r8_[A-Za-z0-9]{10,}"           # Replicate API token
+        r"|npm_[A-Za-z0-9]{10,}"          # npm access token
+        r"|pypi-[A-Za-z0-9_-]{10,}"       # PyPI API token
+        r"|dop_v1_[A-Za-z0-9]{10,}"       # DigitalOcean PAT
+        r"|doo_v1_[A-Za-z0-9]{10,}"       # DigitalOcean OAuth
+        r"|am_[A-Za-z0-9_-]{10,}"         # AgentMail API key
+        r"|sk_[A-Za-z0-9_]{10,}"          # ElevenLabs TTS key
+        r"|tvly-[A-Za-z0-9]{10,}"         # Tavily search API key
+        r"|exa_[A-Za-z0-9]{10,}"          # Exa search API key
+        r"|gsk_[A-Za-z0-9]{10,}"          # Groq Cloud API key
+        r"|syt_[A-Za-z0-9]{10,}"          # Matrix access token
+        r"|retaindb_[A-Za-z0-9]{10,}"     # RetainDB API key
+        r"|hsk-[A-Za-z0-9]{10,}"          # Hindsight API key
+        r"|mem0_[A-Za-z0-9]{10,}"         # Mem0 Platform API key
+        r"|brv_[A-Za-z0-9]{10,}"          # ByteRover API key
         r")(?![A-Za-z0-9_-])"
     )
     _AUTH_HDR_RE = _re.compile(r"(Authorization:\s*Bearer\s+)(\S+)", _re.IGNORECASE)
@@ -179,6 +300,103 @@ def _build_redact_fn():
 _redact_fn_cached = _build_redact_fn()
 
 
+_SENSITIVE_CASE_MARKERS = (
+    "sk-",
+    "ghp_",
+    "github_pat_",
+    "gho_",
+    "ghu_",
+    "ghs_",
+    "ghr_",
+    "AKIA",
+    "xoxb-",
+    "xoxa-",
+    "xoxp-",
+    "xoxr-",
+    "xoxs-",
+    "AIza",
+    "pplx-",
+    "fal_",
+    "fc-",
+    "bb_live_",
+    "gAAAA",
+    "sk_live_",
+    "sk_test_",
+    "rk_live_",
+    "SG.",
+    "hf_",
+    "r8_",
+    "npm_",
+    "pypi-",
+    "dop_v1_",
+    "doo_v1_",
+    "am_",
+    "sk_",
+    "tvly-",
+    "exa_",
+    "gsk_",
+    "syt_",
+    "retaindb_",
+    "hsk-",
+    "mem0_",
+    "brv_",
+    "eyJ",
+    "-----BEGIN",
+)
+_SENSITIVE_LOWER_MARKERS = (
+    "authorization: bearer ",
+    "private key",
+    "postgres://",
+    "postgresql://",
+    "mysql://",
+    "mongodb://",
+    "redis://",
+    "amqp://",
+    "://",  # stage-348 Opus SHOULD-FIX: catch http(s)/ws(s)/ftp URL userinfo + sensitive query params (#2171 follow-up)
+    "access_token",
+    "refresh_token",
+    "id_token",
+    "api_key",
+    "apikey",
+    "client_secret",
+    "auth_token",
+    "raw_secret",
+    "secret_input",
+    "key_material",
+    "x-amz-signature",
+    "token=",
+    "secret=",
+    "password=",
+    "authorization=",
+    "key=",
+    '"token"',
+    '"secret"',
+    '"password"',
+    '"bearer"',
+)
+_SENSITIVE_TELEGRAM_MARKER_RE = _re.compile(r"(?:bot)?\d{8,}:[-A-Za-z0-9_]{30,}")
+_SENSITIVE_DISCORD_MARKER_RE = _re.compile(r"<@!?\d{17,20}>")
+_SENSITIVE_PHONE_MARKER_RE = _re.compile(r"(?<![A-Za-z0-9])\+[1-9]\d{6,14}(?![A-Za-z0-9])")
+
+
+def _might_contain_sensitive_text(text: str) -> bool:
+    """Cheap prefilter before the full agent+fallback redaction pass."""
+    if not isinstance(text, str) or not text:
+        return False
+    if any(marker in text for marker in _SENSITIVE_CASE_MARKERS):
+        return True
+    lower = text.lower()
+    if any(marker in lower for marker in _SENSITIVE_LOWER_MARKERS):
+        return True
+    if ":" in text and _SENSITIVE_TELEGRAM_MARKER_RE.search(text):
+        return True
+    if "<@" in text and _SENSITIVE_DISCORD_MARKER_RE.search(text):
+        return True
+    if "+" in text and _SENSITIVE_PHONE_MARKER_RE.search(text):
+        return True
+    return False
+
+
 def _redact_text(text: str, *, _enabled: bool | None = None) -> str:
     """Redact sensitive text from API responses. Respects api_redact_enabled setting.
 
@@ -193,6 +411,8 @@ def _redact_text(text: str, *, _enabled: bool | None = None) -> str:
         from api.config import load_settings
         _enabled = bool(load_settings().get("api_redact_enabled", True))
     if not _enabled:
+        return text
+    if not _might_contain_sensitive_text(text):
         return text
     return _redact_fn_cached(text)
 

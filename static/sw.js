@@ -7,7 +7,60 @@
 
 // Cache version is injected by the server at request time (routes.py /sw.js handler).
 // Bumps automatically whenever the git commit changes — no manual edits needed.
-const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__';
+// personal: appended suffix to force cache eviction for uncommitted ui.js fix
+// (compression banner anchor + offline debounce + tool naming/scroll +
+//  partial_tool_calls preserved on cancel reload + dual-channel additive
+//  interrupt frontend + smart tool detail renderer w/ github-style diff +
+//  cream skin + micro-animations + composer focus-glow + dot-wave +
+//  message slide-in + cream-specific diff colors + send-btn transitions +
+//  topbar chip hover/press + activity-group expand + scroll-bottom polish +
+//  steer fallback + silent reconnect + Inter font + warmer dark cream +
+//  M3 cream pill composer + asymmetric user bubble +
+//  message actions visible + activity pill restyle +
+//  M3 sidebar tonal active + rounded-square assistant avatar +
+//  M3 topbar chips + surface hierarchy +
+//  tool-running shimmer + code block softening +
+//  queue pill rounded + thinking card softer corners +
+//  markdown typography polish +
+//  inject-pill DOM-only (preserve live tool cards mid-stream) +
+//  composer footer chips unified +
+//  drop "Вы" badge on inject-pill +
+//  inject/steer pills accumulate (don't replace prior) +
+//  freeze live turn before pill (correct chronological order) +
+//  M3 sidebar search pill +
+//  M3 date group headers +
+//  M3 approval card + queue card softer corners +
+//  M3 send-FAB 40x40 with proper elevation +
+//  M3 nav rail with filled active pill +
+//  M3 assistant turn surface container +
+//  M3 typography scale (h1/h2/h3, lists, blockquote) +
+//  M3 tool-card surfaces in Activity body + composer textarea polish +
+//  M3 session-item hover + meta polish +
+//  M3 topbar polish + composer-wrap padding +
+//  M3 thinking card + attach-tray pills +
+//  M3 sidebar header + msg actions + links polish +
+//  M3 queue card rows + project tags +
+//  M3 toast snackbar + empty state typography +
+//  M3 scrollbars + focus rings + form inputs +
+//  M3 dialogs + checkboxes + tooltips +
+//  M3 dropdowns / popovers +
+//  M3 project chips + panel head buttons +
+//  M3 wide rail with text labels (80px) +
+//  M3 composer footer compaction + ctx indicator polish +
+//  M3 cream Prism syntax tokens +
+//  M3 composer pill v2 — display:contents flatten +
+//  M3 composer hairline divider between chip track and input row +
+//  M3 narrower chat column + activity group polish +
+//  M3 DOM rewrite — chips moved to topbar via cream-m3.js +
+//  M3 user bubble consolidated (single source of truth) +
+//  composer floating pill (max-width 780, centered, fade gradient) +
+//  tool-card hierarchy in Activity group (indent + rhythm) +
+//  M3 right workspace panel (surface tone + softer entries) +
+//  fix duplicate tool cards on cancelled turns +
+//  fix tool-clump-at-end on paginated history (skip unanchored aIdx) +
+//  clear S.toolCalls on prepend (re-derive against new indices) +
+//  parts-array Phase 1: msg content helpers (no behavior change yet)) — bump.
+const CACHE_NAME = 'hermes-shell-__WEBUI_VERSION__-personal-parts-helpers';
 
 // Static assets that form the app shell.
 //
@@ -39,28 +92,35 @@ const SHELL_ASSETS = [
   './manifest.json',
 ];
 
-// Install: pre-cache the app shell
+function deleteOldShellCaches() {
+  return caches.keys().then((keys) =>
+    Promise.all(
+      keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))
+    )
+  );
+}
+
+// Install: prune old shell caches first, then pre-cache the app shell. Doing
+// this before caches.open(CACHE_NAME) avoids a temporary double-cache window on
+// quota-sensitive browsers during frequent version bumps.
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(SHELL_ASSETS).catch((err) => {
-        // Non-fatal: if any asset fails, still activate
-        console.warn('[sw] Shell pre-cache partial failure:', err);
-      });
-    })
+    deleteOldShellCaches().then(() =>
+      caches.open(CACHE_NAME).then((cache) => {
+        return cache.addAll(SHELL_ASSETS).catch((err) => {
+          // Non-fatal: if any asset fails, still activate
+          console.warn('[sw] Shell pre-cache partial failure:', err);
+        });
+      })
+    )
   );
   self.skipWaiting();
 });
 
-// Activate: clean up old caches
+// Activate: keep the old-cache cleanup as a safety net in case install was
+// interrupted or an older worker was already waiting.
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))
-      )
-    )
-  );
+  event.waitUntil(deleteOldShellCaches());
   self.clients.claim();
 });
 

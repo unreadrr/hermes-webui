@@ -13,6 +13,7 @@ let _kanbanCurrentBoard = null;
 let _kanbanBoardsList = null;
 let _kanbanBoardMenuOpen = false;
 let _kanbanIsDispatching = false;
+let _kanbanSuppressCardClickUntil = 0;
 // SSE event stream — replaces the 30s polling cadence with a long-lived
 // /api/kanban/events/stream connection. Falls back to polling when the
 // EventSource fails to connect (proxy that strips text/event-stream, etc).
@@ -181,6 +182,24 @@ function _consumeSettingsTargetPanel(fallback = 'chat') {
   return target;
 }
 
+function _resyncChatSidebarAfterPanelSwitch() {
+  if (_currentPanel !== 'chat') return;
+  if (typeof renderSessionListFromCache !== 'function') return;
+  const run = () => {
+    if (_currentPanel !== 'chat') return;
+    if (typeof _renamingSid !== 'undefined' && _renamingSid) return;
+    // If the user opens the per-conversation action menu immediately after
+    // returning to Chat, do not let the deferred sidebar resync tear it down.
+    // renderSessionListFromCache() intentionally closes that menu before it
+    // rebuilds rows, which is correct for normal list refreshes but hostile to
+    // this one-shot panel-transition repair.
+    if (typeof _sessionActionMenu !== 'undefined' && _sessionActionMenu) return;
+    renderSessionListFromCache();
+  };
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+  else run();
+}
+
 async function switchPanel(name, opts = {}) {
   const nextPanel = name || 'chat';
   const prevPanel = _currentPanel;
@@ -244,6 +263,13 @@ async function switchPanel(name, opts = {}) {
     switchSettingsSection(_currentSettingsSection);
     loadSettingsPanel();
   }
+  if (opts.fromRailClick && typeof _isDesktopWidth === 'function' && !_isDesktopWidth()) {
+    const sidebar = document.querySelector('.sidebar');
+    const overlay = document.getElementById('mobileOverlay');
+    if (sidebar) sidebar.classList.add('mobile-open');
+    if (overlay) overlay.classList.add('visible');
+  }
+  _resyncChatSidebarAfterPanelSwitch();
   syncAppTitlebar();
   return true;
 }
@@ -425,11 +451,13 @@ async function loadCrons(animate) {
       item.id = 'cron-' + job.id;
       const status = _cronStatusMeta(job);
       const isNewRun = _cronNewJobIds.has(String(job.id));
+      const isAgentMode = !job.no_agent;
       const profileLabel = _cronProfileLabel(job.profile);
       const profileTitle = _cronProfileTitle(job.profile);
       item.innerHTML = `
         <div class="cron-header">
           ${isNewRun ? '<span class="cron-new-dot" title="New run"></span>' : ''}
+          ${isAgentMode ? '<span class="cron-agent-badge" title="Agent mode">🤖</span>' : ''}
           <span class="cron-name" title="${esc(job.name)}">${esc(job.name)}</span>
           <span class="cron-profile-badge" title="${esc(profileTitle)}">${esc(profileLabel)}</span>
           <span class="cron-status ${status.listClass}">${esc(status.label)}</span>
@@ -453,6 +481,45 @@ async function loadCrons(animate) {
   }
 }
 
+function _cronPanelExpandKey(jobId, suffix){
+  return `hermes-webui-cron-${suffix}-expanded-${encodeURIComponent(String(jobId||''))}`;
+}
+
+function _cronRunExpandKey(jobId, filename){
+  return `${_cronPanelExpandKey(jobId, 'run')}-${encodeURIComponent(String(filename||''))}`;
+}
+
+function _cronExpansionGet(key){
+  try { return localStorage.getItem(key) === '1'; } catch(_) { return false; }
+}
+
+function _cronExpansionSet(key, expanded){
+  try { localStorage.setItem(key, expanded ? '1' : '0'); } catch(_) {}
+}
+
+function toggleCronPromptExpanded(jobId){
+  const key = _cronPanelExpandKey(jobId, 'prompt');
+  _cronExpansionSet(key, !_cronExpansionGet(key));
+  if (_currentCronDetail && String(_currentCronDetail.id) === String(jobId)) {
+    _renderCronDetail(_currentCronDetail);
+  }
+}
+
+function toggleCronRunExpanded(jobId, filename, runId){
+  const key = _cronRunExpandKey(jobId, filename);
+  const expanded = !_cronExpansionGet(key);
+  _cronExpansionSet(key, expanded);
+  const item = document.getElementById(runId);
+  const body = item ? item.querySelector('.detail-run-body') : null;
+  const btn = item ? item.querySelector('.detail-expand-toggle') : null;
+  if (body) body.classList.toggle('expanded', expanded);
+  if (btn) {
+    btn.textContent = expanded ? '▴' : '▾';
+    btn.title = expanded ? (t('cron_collapse_output') || 'Collapse output') : (t('cron_expand_output') || 'Expand output');
+    btn.setAttribute('aria-label', btn.title);
+  }
+}
+
 function _renderCronDetail(job){
   _currentCronDetail = job;
   const title = $('taskDetailTitle');
@@ -468,6 +535,11 @@ function _renderCronDetail(job){
   const deliver = job.deliver || 'local';
   const isNoAgent = !!job.no_agent;
   const cronJobMode = isNoAgent ? 'no-agent' : 'agent';
+  const modelProvider =
+    job.provider && job.model ? `${esc(job.provider)}/${esc(job.model)}` :
+    job.model ? esc(job.model) :
+    job.provider ? esc(job.provider) :
+    isNoAgent ? '' : 'default';
   const script = job.script || '';
   const profileLabel = _cronProfileLabel(job.profile);
   const profileTitle = _cronProfileTitle(job.profile);
@@ -488,6 +560,8 @@ function _renderCronDetail(job){
         </div>
       </div>` : '';
   const toastNotifications = job.toast_notifications !== false;
+  const promptExpanded = _cronExpansionGet(_cronPanelExpandKey(job.id, 'prompt'));
+  const promptToggleLabel = promptExpanded ? (t('cron_collapse_prompt') || 'Collapse prompt') : (t('cron_expand_prompt') || 'Expand prompt');
   body.innerHTML = `
     <div class="main-view-content">
       ${attentionBanner}
@@ -498,7 +572,7 @@ function _renderCronDetail(job){
         <div class="detail-row"><div class="detail-row-label">${esc(t('cron_next'))}</div><div class="detail-row-value">${esc(nextRun)}</div></div>
         <div class="detail-row"><div class="detail-row-label">${esc(t('cron_last'))}</div><div class="detail-row-value">${esc(lastRun)}</div></div>
         <div class="detail-row"><div class="detail-row-label">Deliver</div><div class="detail-row-value">${esc(deliver)}</div></div>
-        <div class="detail-row"><div class="detail-row-label">Mode</div><div class="detail-row-value"><span class="detail-badge" id="cronJobMode">${esc(cronJobMode)}</span></div></div>
+        <div class="detail-row"><div class="detail-row-label">Mode</div><div class="detail-row-value"><span class="detail-badge" id="cronJobMode">${esc(cronJobMode)}</span>${modelProvider ? ` <code>${modelProvider}</code>` : ''}</div></div>
         ${isNoAgent ? `<div class="detail-row"><div class="detail-row-label">No-agent script</div><div class="detail-row-value"><code>${esc(script || '—')}</code></div></div>` : ''}
         <div class="detail-row"><div class="detail-row-label">${esc(t('cron_profile_label') || 'Profile')}</div><div class="detail-row-value"><span class="detail-badge active" title="${esc(profileTitle)}">${esc(profileLabel)}</span></div></div>
         <div class="detail-row"><div class="detail-row-label">${esc(t('cron_toast_notifications_label') || 'Completion toasts')}</div><div class="detail-row-value"><span class="detail-badge ${toastNotifications ? 'active' : ''}">${esc(toastNotifications ? (t('cron_toast_notifications_enabled') || 'Enabled') : (t('cron_toast_notifications_disabled') || 'Disabled'))}</span></div></div>
@@ -506,8 +580,11 @@ function _renderCronDetail(job){
         ${lastError}
       </div>
       <div class="detail-card">
-        <div class="detail-card-title">Prompt</div>
-        <div class="detail-prompt">${esc(job.prompt || '')}</div>
+        <div class="detail-card-title detail-card-title-row">
+          <span>Prompt</span>
+          <button type="button" class="detail-expand-toggle" onclick="toggleCronPromptExpanded('${esc(job.id)}')" title="${esc(promptToggleLabel)}" aria-label="${esc(promptToggleLabel)}">${esc(promptExpanded ? '▴' : '▾')}</button>
+        </div>
+        <div class="detail-prompt ${promptExpanded ? 'expanded' : ''}">${esc(job.prompt || '')}</div>
       </div>
       <div class="detail-card ${_cronNewJobIds.has(String(job.id)) ? 'has-new-run' : ''}" id="cronDetailRuns">
         <div class="detail-card-title">${esc(t('cron_last_output'))}</div>
@@ -566,12 +643,18 @@ async function _loadCronDetailRuns(jobId){
       const sizeStr = run.size > 1024 ? (run.size/1024).toFixed(1)+' KB' : run.size+' B';
       const dateStr = new Date(run.modified * 1000).toLocaleString();
       const rid = `cron-det-run-${jobId}-${i}`;
+      const usageStrip = _formatCronRunUsageStrip(run.usage);
+      const runExpanded = _cronExpansionGet(_cronRunExpandKey(jobId, run.filename));
+      const runToggleLabel = runExpanded ? (t('cron_collapse_output') || 'Collapse output') : (t('cron_expand_output') || 'Expand output');
       return `<div class="detail-run-item" id="${rid}">
         <div class="detail-run-head" onclick="_loadRunContent('${esc(jobId)}','${esc(run.filename)}','${rid}')">
-          <span><span style="opacity:.7">${esc(ts)}</span> <span style="opacity:.4;font-size:11px">${esc(sizeStr)}</span></span>
-          <span style="opacity:.6">▸</span>
+          <span><span style="opacity:.7">${esc(ts)}</span> <span style="opacity:.4;font-size:11px">${esc(sizeStr)}</span>${usageStrip ? ` <span class="cron-run-usage-strip">${esc(usageStrip)}</span>` : ''}</span>
+          <span class="detail-run-actions">
+            <button type="button" class="detail-expand-toggle" onclick="event.stopPropagation();toggleCronRunExpanded('${esc(jobId)}','${esc(run.filename)}','${rid}')" title="${esc(runToggleLabel)}" aria-label="${esc(runToggleLabel)}">${esc(runExpanded ? '▴' : '▾')}</button>
+            <span style="opacity:.6">▸</span>
+          </span>
         </div>
-        <div class="detail-run-body" style="color:var(--muted);font-size:12px">${esc(t('loading'))}</div>
+        <div class="detail-run-body ${runExpanded ? 'expanded' : ''}" style="color:var(--muted);font-size:12px">${esc(t('loading'))}</div>
       </div>`;
     }).join('');
     const countLabel = data.total > 50 ? ` (${data.total} runs, showing latest 50)` : ` (${data.total} runs)`;
@@ -586,6 +669,7 @@ async function _loadRunContent(jobId, filename, runId){
   if (!item.classList.contains('open')) {
     item.classList.add('open');
   }
+  body.classList.toggle('expanded', _cronExpansionGet(_cronRunExpandKey(jobId, filename)));
   body.innerHTML = `<span style="opacity:.5">${esc(t('loading'))}</span>`;
   try {
     const data = await api(`/api/crons/run?job_id=${encodeURIComponent(jobId)}&filename=${encodeURIComponent(filename)}`);
@@ -593,19 +677,31 @@ async function _loadRunContent(jobId, filename, runId){
       body.textContent = data.error;
       return;
     }
+    const expanded = _cronExpansionGet(_cronRunExpandKey(jobId, filename));
+    const output = expanded ? (data.content || data.snippet || '') : (data.snippet || data.content || '');
+    body.classList.toggle('expanded', expanded);
     // Render markdown content using the same renderer as chat messages
     if (typeof renderMd === 'function') {
-      body.innerHTML = renderMd(data.snippet || data.content);
+      body.innerHTML = renderMd(output);
     } else {
-      body.textContent = data.snippet || data.content;
+      body.textContent = output;
     }
-    // Show "View full output" button if content was truncated
-    if (data.content && data.snippet && data.content.length > data.snippet.length) {
+    const usageStrip = _formatCronRunUsageStrip(data.usage);
+    if (usageStrip) {
+      const usage = document.createElement('div');
+      usage.className = 'cron-run-usage-strip cron-run-usage-footer';
+      usage.textContent = usageStrip;
+      body.appendChild(usage);
+    }
+    // Show "View full output" button only for collapsed previews. Expanded rows render the full body inline.
+    if (!expanded && data.content && data.snippet && data.content.length > data.snippet.length) {
       const btn = document.createElement('button');
       btn.style.cssText = 'margin-top:8px;padding:4px 12px;border-radius:var(--radius-btn);border:1px solid var(--border-subtle);background:var(--surface-subtle);color:var(--text-secondary);cursor:pointer;font-size:12px';
       btn.textContent = t('cron_view_full_output') || 'View full output';
       btn.onclick = () => {
-        body.innerHTML = renderMd ? renderMd(data.content) : '';
+        _cronExpansionSet(_cronRunExpandKey(jobId, filename), true);
+        body.classList.add('expanded');
+        body.innerHTML = renderMd ? renderMd(data.content) : data.content;
         btn.remove();
       };
       body.appendChild(btn);
@@ -948,6 +1044,27 @@ function _cronOutputSnippet(content) {
   return body.slice(0, 600) || '(empty)';
 }
 
+function _formatCronRunUsageStrip(usage) {
+  if (!usage || typeof usage !== 'object') return '';
+  const parts = [];
+  const fmt = n => {
+    const value = Number(n || 0);
+    if (!Number.isFinite(value) || value <= 0) return '';
+    if (value >= 1000000) return (value / 1000000).toFixed(value >= 10000000 ? 0 : 1).replace(/\.0$/, '') + 'M';
+    if (value >= 1000) return (value / 1000).toFixed(value >= 10000 ? 0 : 1).replace(/\.0$/, '') + 'k';
+    return String(Math.round(value));
+  };
+  const input = fmt(usage.input_tokens);
+  const output = fmt(usage.output_tokens);
+  const total = fmt(usage.total_tokens);
+  if (input || output) parts.push(`${input || '0'} in · ${output || '0'} out`);
+  else if (total) parts.push(`${total} tokens`);
+  const cost = Number(usage.estimated_cost_usd);
+  if (Number.isFinite(cost) && cost > 0) parts.push(`$${cost < 0.01 ? cost.toFixed(4) : cost.toFixed(3)}`);
+  if (usage.model) parts.push(String(usage.model));
+  return parts.join(' · ');
+}
+
 // ── Cron run watch ────────────────────────────────────────────────────────────
 let _cronWatchInterval = null;
 let _cronWatchStart = null;
@@ -1172,10 +1289,31 @@ async function quickKanbanCardAction(event, taskId, status){
   return updateKanbanTask(taskId, {status});
 }
 
+function _kanbanSuppressNextCardClick(){
+  _kanbanSuppressCardClickUntil = Date.now() + 700;
+}
+
 function dragKanbanTask(event, taskId){
+  _kanbanSuppressNextCardClick();
   if (!event.dataTransfer) return;
   event.dataTransfer.effectAllowed = 'move';
   event.dataTransfer.setData('text/plain', taskId);
+}
+
+function finishKanbanDrag(event){
+  if (event) _kanbanSuppressNextCardClick();
+}
+
+function openKanbanCard(event, taskId){
+  if (Date.now() < _kanbanSuppressCardClickUntil) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    return false;
+  }
+  loadKanbanTask(taskId);
+  return false;
 }
 
 function allowKanbanDrop(event){
@@ -1198,10 +1336,13 @@ function clearKanbanDrop(event){
 }
 
 async function dropKanbanTask(event, status){
+  _kanbanSuppressNextCardClick();
   event.preventDefault();
+  event.stopPropagation();
   clearKanbanDrop(event);
   const taskId = event.dataTransfer ? event.dataTransfer.getData('text/plain') : '';
-  if (taskId && status) await updateKanbanTask(taskId, {status});
+  if (taskId && status) await updateKanbanTask(taskId, {status}, {openDetail: false});
+  _kanbanSuppressNextCardClick();
 }
 
 function _kanbanLaneNames(columns){
@@ -1264,7 +1405,7 @@ function _kanbanCard(task, status){
   const stale = _kanbanCardStalenessClass(task);
   const body = _kanbanTaskBody(task);
   const assignee = task.assignee ? `<span class="kanban-card-assignee">@${esc(task.assignee)}</span>` : `<span class="kanban-card-unassigned">${esc(t('kanban_unassigned'))}</span>`;
-  return `<article class="kanban-card ${esc(stale)}" data-kanban-task-id="${esc(task.id)}" draggable="true" ondragstart="dragKanbanTask(event, '${esc(task.id)}')" onclick="loadKanbanTask('${esc(task.id)}')" tabindex="0" role="button" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();loadKanbanTask('${esc(task.id)}')}">
+  return `<article class="kanban-card ${esc(stale)}" data-kanban-task-id="${esc(task.id)}" draggable="true" ondragstart="dragKanbanTask(event, '${esc(task.id)}')" ondragend="finishKanbanDrag(event)" onclick="return openKanbanCard(event, '${esc(task.id)}')" tabindex="0" role="button" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();loadKanbanTask('${esc(task.id)}')}">
     <div class="kanban-card-topline"><span class="kanban-card-id">${esc(task.id || '')}</span>${priority ? `<span class="kanban-badge priority">P${priority}</span>` : ''}${task.tenant ? `<span class="kanban-badge tenant">${esc(task.tenant)}</span>` : ''}</div>
     <div class="kanban-card-title">${esc(_kanbanTaskTitle(task))}</div>
     ${body ? `<div class="kanban-card-body">${_kanbanRenderMarkdown(body)}</div>` : ''}
@@ -2177,15 +2318,16 @@ async function submitKanbanTaskModal(){
   }
 }
 
-async function updateKanbanTask(taskId, patch){
+async function updateKanbanTask(taskId, patch, opts){
   if (!taskId || !patch) return;
   try {
+    const openDetail = !opts || opts.openDetail !== false;
     const updated = await api('/api/kanban/tasks/' + encodeURIComponent(taskId) + _kanbanBoardQuery(), {
       method: 'PATCH',
       body: JSON.stringify(patch),
     });
     await loadKanban(true);
-    await loadKanbanTask((updated && updated.task && updated.task.id) || taskId);
+    if (openDetail) await loadKanbanTask((updated && updated.task && updated.task.id) || taskId);
   } catch(e) { showToast(t('kanban_unavailable') + ': ' + (e.message || e), 'error'); }
 }
 
@@ -2918,6 +3060,66 @@ function _renderLlmWikiStatus(d) {
     </div>`;
 }
 
+/**
+ * Bucket daily token rows for chart display.
+ * Returns rows unchanged when length <= 30 (per-day resolution).
+ * For longer ranges, groups consecutive days into buckets:
+ *   31–90 days → 2-day buckets
+ *   91–180 days → 3-day buckets
+ *   181–365 days → 8-day buckets
+ * Result is always <= ~52 bars.
+ * Each bucket row has:
+ *   - label: short label for axis (e.g. MM-DD or MM-DD–MM-DD)
+ *   - title: full tooltip title (e.g. 2026-01-01 – 2026-01-05)
+ *   - date: first date in bucket (used for date label slicing)
+ *   - input_tokens, output_tokens, sessions, cost: summed across bucket
+ */
+function _bucketDailyTokensForChart(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return [];
+  const len = rows.length;
+  if (len <= 30) return rows;  // per-day resolution for 7/30-day ranges
+
+  // Target <= 75 bars; derive bucket size
+  let bucketSize;
+  if (len <= 90) {
+    bucketSize = 2;
+  } else if (len <= 180) {
+    bucketSize = 3;
+  } else if (len <= 365) {
+    bucketSize = 8;  // <=52 bars for 365 days (ceil(365/8)=46)
+  } else {
+    bucketSize = 8;  // fallback for >365 (shouldn't occur in practice)
+  }
+
+  const result = [];
+  for (let i = 0; i < len; i += bucketSize) {
+    const slice = rows.slice(i, i + bucketSize);
+    const input_tokens = slice.reduce((s, r) => s + Number(r.input_tokens || 0), 0);
+    const output_tokens = slice.reduce((s, r) => s + Number(r.output_tokens || 0), 0);
+    const sessions = slice.reduce((s, r) => s + Number(r.sessions || 0), 0);
+    const cost = slice.reduce((s, r) => s + Number(r.cost || 0), 0);
+
+    const firstDate = slice[0].date;
+    const lastDate = slice[slice.length - 1].date;
+
+    // Label: short form for axis
+    const firstLabel = String(firstDate).slice(5);  // MM-DD
+    const lastLabel = String(lastDate).slice(5);
+    const label = (firstDate === lastDate) ? firstLabel : (firstLabel + '–' + lastLabel);
+
+    result.push({
+      label,
+      title: firstDate + (firstDate !== lastDate ? ' – ' + lastDate : ''),
+      date: firstDate,
+      input_tokens,
+      output_tokens,
+      sessions,
+      cost,
+    });
+  }
+  return result;
+}
+
 function _renderInsights(d, box, wikiStatus) {
   const fmtNum = n => Number(n || 0).toLocaleString();
   const fmtCost = c => {
@@ -2937,21 +3139,24 @@ function _renderInsights(d, box, wikiStatus) {
     { label: t('insights_cost'), value: fmtCost(d.total_cost), icon: li('dollar-sign', 18) },
   ];
 
-  // Daily token trend
+  // Daily token trend — bucket long ranges to avoid horizontal overflow
   const dailyTokens = Array.isArray(d.daily_tokens) ? d.daily_tokens : [];
+  const chartRows = _bucketDailyTokensForChart(dailyTokens);
   let dailyHtml = '';
-  if (dailyTokens.length) {
-    const maxDailyTokens = Math.max(...dailyTokens.map(r => Number(r.input_tokens || 0) + Number(r.output_tokens || 0)), 1);
-    const labelEvery = Math.max(Math.ceil(dailyTokens.length / 7), 1);
+  if (chartRows.length) {
+    const maxDailyTokens = Math.max(...chartRows.map(r => Number(r.input_tokens || 0) + Number(r.output_tokens || 0)), 1);
+    const labelEvery = Math.max(Math.ceil(chartRows.length / 7), 1);
     dailyHtml = `<div class="insights-card"><div class="insights-card-title">${esc(t('insights_daily_tokens'))}</div><div class="insights-daily-token-chart">` +
-      dailyTokens.map((r, idx) => {
+      chartRows.map((r, idx) => {
         const input = Number(r.input_tokens || 0);
         const output = Number(r.output_tokens || 0);
         const inputPct = Math.max((input / maxDailyTokens) * 100, input ? 2 : 0).toFixed(1);
         const outputPct = Math.max((output / maxDailyTokens) * 100, output ? 2 : 0).toFixed(1);
-        const showLabel = idx === 0 || idx === dailyTokens.length - 1 || idx % labelEvery === 0;
-        const title = `${r.date} · ${fmtTokens(input)} ${t('insights_input_tokens')} · ${fmtTokens(output)} ${t('insights_output_tokens')} · ${fmtCost(r.cost)} · ${fmtNum(r.sessions)} ${t('insights_sessions')}`;
-        return `<div class="insights-daily-bar" title="${esc(title)}"><div class="insights-daily-stack" aria-label="${esc(title)}"><div class="insights-daily-bar-output" style="height:${outputPct}%"></div><div class="insights-daily-bar-input" style="height:${inputPct}%"></div></div><span>${showLabel ? esc(String(r.date).slice(5)) : ''}</span></div>`;
+        const showLabel = idx === 0 || idx === chartRows.length - 1 || idx % labelEvery === 0;
+        const titleDate = r.title || r.date;
+        const title = `${titleDate} · ${fmtTokens(input)} ${t('insights_input_tokens')} · ${fmtTokens(output)} ${t('insights_output_tokens')} · ${fmtCost(r.cost)} · ${fmtNum(r.sessions)} ${t('insights_sessions')}`;
+        const labelText = r.label !== undefined ? r.label : String(r.date).slice(5);
+        return `<div class="insights-daily-bar" title="${esc(title)}"><div class="insights-daily-stack" aria-label="${esc(title)}"><div class="insights-daily-bar-output" style="height:${outputPct}%"></div><div class="insights-daily-bar-input" style="height:${inputPct}%"></div></div><span>${showLabel ? esc(labelText) : ''}</span></div>`;
       }).join('') +
       `</div><div class="insights-daily-legend"><span><i class="insights-daily-legend-input"></i>${esc(t('insights_input_tokens'))}</span><span><i class="insights-daily-legend-output"></i>${esc(t('insights_output_tokens'))}</span></div></div>`;
   } else {
@@ -3023,7 +3228,7 @@ function _renderInsights(d, box, wikiStatus) {
       ${overviewCards.map(c => `<div class="insights-stat"><div class="insights-stat-icon">${c.icon}</div><div class="insights-stat-info"><div class="insights-stat-value">${c.value}</div><div class="insights-stat-label">${esc(c.label)}</div></div></div>`).join('')}
     </div>
     ${dailyHtml}
-    <div class="insights-row">
+    <div class="insights-row insights-usage-grid">
       ${tokenCards}
       ${modelsHtml}
     </div>
@@ -3110,9 +3315,23 @@ function renderSkills(skills) {
     sec.appendChild(hdr);
     for (const skill of items.sort((a,b) => a.name.localeCompare(b.name))) {
       const el = document.createElement('div');
-      el.className = 'skill-item';
+      el.className = 'skill-item' + (skill.disabled ? ' disabled' : '');
       el.style.display = collapsed ? 'none' : '';
-      el.innerHTML = `<span class="skill-name">${esc(skill.name)}</span><span class="skill-desc">${esc(skill.description||'')}</span>`;
+      const isDisabled = skill.disabled || false;
+      const toggle = document.createElement('span');
+      toggle.className = 'skill-toggle' + (isDisabled ? '' : ' enabled');
+      toggle.title = isDisabled ? t('skill_disabled') : t('skill_enabled');
+      toggle.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        toggleSkill(skill.name, !isDisabled);
+      });
+      const nameEl = document.createElement('span');
+      nameEl.className = 'skill-name';
+      nameEl.textContent = skill.name;
+      const descEl = document.createElement('span');
+      descEl.className = 'skill-desc';
+      descEl.textContent = skill.description || '';
+      el.append(toggle, nameEl, descEl);
       el.onclick = () => openSkill(skill.name, el);
       sec.appendChild(el);
     }
@@ -3122,6 +3341,28 @@ function renderSkills(skills) {
 
 function filterSkills() {
   if (_skillsData) renderSkills(_skillsData);
+}
+
+
+async function toggleSkill(name, currentlyEnabled) {
+  const newEnabled = !currentlyEnabled;
+  try {
+    const result = await api('/api/skills/toggle', {
+      method: 'POST',
+      body: JSON.stringify({ name, enabled: newEnabled })
+    });
+    if (result && result.ok) {
+      if (_skillsData) {
+        const skill = _skillsData.find(s => s.name === name);
+        if (skill) skill.disabled = !newEnabled;
+      }
+      renderSkills(_skillsData || []);
+    } else {
+      setStatus((result && result.error) || t('skill_toggle_failed'));
+    }
+  } catch(e) {
+    setStatus(t('skill_toggle_failed') + e.message);
+  }
 }
 
 // Currently selected skill detail — kept across panel switches so re-entering
@@ -3174,6 +3415,21 @@ function _renderSkillDetail(name, content, linkedFiles) {
   _setSkillHeaderButtons('read');
 }
 
+function _renderSkillError(name, message) {
+  const title = $('skillDetailTitle');
+  const body = $('skillDetailBody');
+  const empty = $('skillDetailEmpty');
+  if (title) title.textContent = name;
+  if (body) {
+    body.innerHTML = `<div class="main-view-content"><div class="detail-form-error" style="display:block">${esc(message || t('skill_load_failed'))}</div></div>`;
+    body.style.display = '';
+  }
+  if (empty) empty.style.display = 'none';
+  _currentSkillDetail = null;
+  _skillMode = 'empty';
+  _setSkillHeaderButtons('empty');
+}
+
 function _setSkillHeaderButtons(mode) {
   const editBtn = $('btnEditSkillDetail');
   const delBtn = $('btnDeleteSkillDetail');
@@ -3194,6 +3450,12 @@ async function openSkill(name, el) {
   _editingSkillName = null;
   try {
     const data = await api(`/api/skills/content?name=${encodeURIComponent(name)}`);
+    if (data && (data.success === false || data.error)) {
+      const message = data.error || t('skill_load_failed');
+      _renderSkillError(name, message);
+      setStatus(t('skill_load_failed') + message);
+      return;
+    }
     _currentSkillDetail = { name, content: data.content || '', linked_files: data.linked_files || {} };
     _renderSkillDetail(name, data.content || '', data.linked_files || {});
   } catch(e) { setStatus(t('skill_load_failed') + e.message); }
@@ -3202,6 +3464,11 @@ async function openSkill(name, el) {
 async function openSkillFile(skillName, filePath) {
   try {
     const data = await api(`/api/skills/content?name=${encodeURIComponent(skillName)}&file=${encodeURIComponent(filePath)}`);
+    if (data && data.error) {
+      _renderSkillError(skillName, data.error);
+      setStatus(t('skill_file_load_failed') + data.error);
+      return;
+    }
     const body = $('skillDetailBody');
     if (!body) return;
     const ext = (filePath.split('.').pop() || '').toLowerCase();
@@ -3382,12 +3649,13 @@ async function deleteCurrentSkill() {
 
 // ── Memory (main view) ──
 let _memoryData = null;
-let _currentMemorySection = null; // 'memory' | 'user'
+let _currentMemorySection = null; // 'memory' | 'user' | 'soul'
 let _memoryMode = 'empty'; // 'empty' | 'read' | 'edit'
 
 const MEMORY_SECTIONS = [
   { key: 'memory', labelKey: 'my_notes', emptyKey: 'no_notes_yet', iconKey: 'brain' },
   { key: 'user',   labelKey: 'user_profile', emptyKey: 'no_profile_yet', iconKey: 'user' },
+  { key: 'soul',   labelKey: 'agent_soul', emptyKey: 'no_soul_yet', iconKey: 'sparkles' },
 ];
 
 function _memorySectionMeta(key) {
@@ -3396,12 +3664,16 @@ function _memorySectionMeta(key) {
 
 function _memorySectionContent(key) {
   if (!_memoryData) return '';
-  return key === 'user' ? (_memoryData.user || '') : (_memoryData.memory || '');
+  if (key === 'user') return _memoryData.user || '';
+  if (key === 'soul') return _memoryData.soul || '';
+  return _memoryData.memory || '';
 }
 
 function _memorySectionMtime(key) {
   if (!_memoryData) return 0;
-  return key === 'user' ? (_memoryData.user_mtime || 0) : (_memoryData.memory_mtime || 0);
+  if (key === 'user') return _memoryData.user_mtime || 0;
+  if (key === 'soul') return _memoryData.soul_mtime || 0;
+  return _memoryData.memory_mtime || 0;
 }
 
 function _setMemoryHeaderButtons(mode) {
@@ -4276,6 +4548,38 @@ async function switchToWorkspace(path,name){
 
 // ── Profile panel + dropdown ──
 let _profilesCache = null;
+let _profileSwitchGeneration = 0;
+
+async function _profileSwitchPanelLoad(){
+  if (_currentPanel === 'skills') await loadSkills();
+  if (_currentPanel === 'memory') await loadMemory();
+  if (_currentPanel === 'tasks') await loadCrons();
+  if (_currentPanel === 'kanban') await loadKanban();
+  if (_currentPanel === 'profiles') await loadProfilesPanel();
+  if (_currentPanel === 'workspaces') await loadWorkspacesPanel();
+}
+
+function _refreshProfileSwitchBackground(gen){
+  window._modelDropdownReady=null;
+  if (typeof window._ensureModelDropdownReady === 'function') {
+    Promise.resolve(window._ensureModelDropdownReady()).catch(()=>{});
+  }
+  Promise.resolve(loadWorkspaceList()).then(()=>{
+    if (gen !== _profileSwitchGeneration) return;
+    if (S.session && typeof syncTopbar === 'function') syncTopbar();
+  }).catch(()=>{});
+  // Reconcile per-profile sidebar tab visibility. hidden_tabs is a per-profile
+  // appearance setting; without this fetch, Profile A's hidden-tabs choice
+  // would remain in effect under Profile B until the user opens Settings.
+  // Stage-394 follow-up to #2636 deep review.
+  Promise.resolve(api('/api/settings')).then(function(s){
+    if (gen !== _profileSwitchGeneration) return;
+    var hidden = (s && Array.isArray(s.hidden_tabs)) ? s.hidden_tabs : [];
+    hidden = hidden.filter(function(x){ return typeof x === 'string' && x.trim(); });
+    if (typeof _setHiddenTabs === 'function') _setHiddenTabs(hidden);
+    if (typeof _applyTabVisibility === 'function') _applyTabVisibility(hidden);
+  }).catch(function(){});
+}
 
 async function loadProfilesPanel() {
   const panel = $('profilesPanel');
@@ -4284,8 +4588,22 @@ async function loadProfilesPanel() {
     const data = await api('/api/profiles');
     _profilesCache = data;
     panel.innerHTML = '';
+    const explainer = document.createElement('div');
+    explainer.className = 'profile-card profile-help-card';
+    explainer.innerHTML = `
+      <div class="profile-card-header">
+        <div style="min-width:0;flex:1">
+          <div class="profile-card-name">Profiles vs workspaces</div>
+          <div class="profile-card-meta">Use profiles for how the agent works; use workspaces for what files it works on.</div>
+        </div>
+      </div>`;
+    explainer.onclick = () => _renderProfileConceptHelp(data.active || 'default');
+    panel.appendChild(explainer);
     if (!data.profiles || !data.profiles.length) {
-      panel.innerHTML = `<div style="padding:16px;color:var(--muted);font-size:12px">${esc(t('profiles_no_profiles'))}</div>`;
+      const emptyMsg = document.createElement('div');
+      emptyMsg.style.cssText = 'padding:16px;color:var(--muted);font-size:12px';
+      emptyMsg.textContent = t('profiles_no_profiles');
+      panel.appendChild(emptyMsg);
       if (_profileMode !== 'create') _clearProfileDetail();
       return;
     }
@@ -4326,6 +4644,28 @@ async function loadProfilesPanel() {
   } catch (e) {
     panel.innerHTML = `<div style="color:var(--accent);font-size:12px;padding:12px">${esc(t('error_prefix'))}${esc(e.message)}</div>`;
   }
+}
+
+function _renderProfileConceptHelp(activeName){
+  const title = $('profileDetailTitle');
+  const body = $('profileDetailBody');
+  const empty = $('profileDetailEmpty');
+  if (!title || !body) return;
+  title.textContent = 'Profiles vs workspaces';
+  body.innerHTML = `
+    <div class="main-view-content">
+      <div class="detail-card">
+        <div class="detail-card-title">Use profiles for how; workspaces for what</div>
+        <div class="detail-row"><div class="detail-row-label">Profiles</div><div class="detail-row-value">Agent identity, memory, skills, model/provider config, and connected tools. Create profiles for roles like researcher, writer, marketer, or developer when those roles should carry different context or capabilities.</div></div>
+        <div class="detail-row"><div class="detail-row-label">Workspaces</div><div class="detail-row-value">Project or product folders on disk. Use one workspace per repo/product so chat, terminal, and file browsing point at the right files.</div></div>
+        <div class="detail-row"><div class="detail-row-label">Together</div><div class="detail-row-value">A profile can have a default workspace, but you can still switch workspaces for a session. Profiles answer “who is working?”; workspaces answer “where are they working?”</div></div>
+      </div>
+    </div>`;
+  body.style.display = '';
+  if (empty) empty.style.display = 'none';
+  _profileMode = 'read';
+  _currentProfileDetail = null;
+  _setProfileHeaderButtons('empty');
 }
 
 function _renderProfileDetail(p, activeName){
@@ -4502,6 +4842,7 @@ async function switchToProfile(name) {
   const _chip = $('profileChip');
   const _chipLabel = $('profileChipLabel');
   const _prevProfileName = S.activeProfile || 'default';
+  const _switchGen = ++_profileSwitchGeneration;
   if (_chip) { _chip.classList.add('switching'); _chip.disabled = true; }
   // Optimistic name update — shows the target name right away
   if (_chipLabel) _chipLabel.textContent = name;
@@ -4517,35 +4858,52 @@ async function switchToProfile(name) {
 
   try {
     const data = await api('/api/profile/switch', { method: 'POST', body: JSON.stringify({ name }) });
+    if (_switchGen !== _profileSwitchGeneration) return;
     S.activeProfile = data.active || name;
 
     // Update composer placeholder and title bar while the core profile-switch
     // state is still close to the profile API response.
     if (typeof applyBotName === 'function') applyBotName();
 
-    // ── Model + Workspace (parallelized) ───────────────────────────────────
-    // populateModelDropdown hits /api/models; loadWorkspaceList hits /api/workspaces.
-    // They are fully independent — run both simultaneously to cut switch time ~50%.
+    // ── Model + Workspace ──────────────────────────────────────────────────
+    // Apply the profile defaults returned by /api/profile/switch immediately.
+    // Refreshing the full model/workspace catalogs is useful, but it should not
+    // hold the visible switch animation open.
     if(typeof _clearPersistedModelState==='function') _clearPersistedModelState();
     else localStorage.removeItem('hermes-webui-model');
     _skillsData = null;
     _workspaceList = null;
-    await Promise.all([populateModelDropdown(), loadWorkspaceList()]);
+    if (data.default_model) window._defaultModel = data.default_model;
+    if (data.default_model_provider) window._activeProvider = data.default_model_provider;
 
     // ── Apply model ────────────────────────────────────────────────────────
     if (data.default_model) {
       const sel = $('modelSelect');
-      const resolved = _applyModelToDropdown(data.default_model, sel, window._activeProvider||null);
+      const providerId = data.default_model_provider || window._activeProvider || null;
+      const existingDefaultOpt = sel ? Array.from(sel.options).find(o => o.value === data.default_model) : null;
+      if (existingDefaultOpt && providerId && !existingDefaultOpt.dataset.provider) {
+        existingDefaultOpt.dataset.provider = providerId;
+      }
+      if (sel && !existingDefaultOpt) {
+        const opt = document.createElement('option');
+        opt.value = data.default_model;
+        opt.textContent = typeof getModelLabel === 'function' ? getModelLabel(data.default_model) : data.default_model;
+        opt.dataset.custom = '1';
+        if (providerId) opt.dataset.provider = providerId;
+        sel.querySelectorAll('option[data-custom]').forEach(o => o.remove());
+        sel.appendChild(opt);
+      }
+      const resolved = _applyModelToDropdown(data.default_model, sel, providerId);
       const modelToUse = resolved || data.default_model;
       const modelState = (typeof _modelStateForSelect==='function')
         ? _modelStateForSelect(sel, modelToUse)
-        : {model:modelToUse,model_provider:null};
+        : {model:modelToUse,model_provider:providerId};
       S._pendingProfileModel = modelToUse;
-      S._pendingProfileModelProvider = modelState.model_provider||null;
+      S._pendingProfileModelProvider = modelState.model_provider||providerId||null;
       // Only patch the in-memory session model if we're NOT about to replace the session
       if (S.session && !sessionInProgress) {
         S.session.model = modelToUse;
-        S.session.model_provider = modelState.model_provider||null;
+        S.session.model_provider = modelState.model_provider||providerId||null;
       }
     }
 
@@ -4574,23 +4932,14 @@ async function switchToProfile(name) {
 
     // ── Session ────────────────────────────────────────────────────────────
     _showAllProfiles = false;
+    if (typeof animateNextSessionListRefresh === 'function') animateNextSessionListRefresh();
 
     if (sessionInProgress) {
       // The current session has messages and belongs to the previous profile.
       // Start a new session for the new profile so nothing gets cross-tagged.
-      await newSession(false);
-      // Apply profile default workspace to the newly created session (fixes #424)
-      if (S._profileDefaultWorkspace && S.session) {
-        try {
-          await api('/api/session/update', { method: 'POST', body: JSON.stringify({
-            session_id: S.session.session_id,
-            workspace: S._profileDefaultWorkspace,
-            model: S.session.model,
-            model_provider: S.session.model_provider||null,
-          })});
-          S.session.workspace = S._profileDefaultWorkspace;
-        } catch (_) {}
-      }
+      const workspaceVisible = typeof _workspacePanelMode !== 'undefined' && _workspacePanelMode !== 'closed';
+      await newSession(false, {awaitWorkspaceLoad: workspaceVisible});
+      if (_switchGen !== _profileSwitchGeneration) return;
       // Keep topbar chips (workspace/profile) in sync after creating the
       // new profile-scoped session.
       syncTopbar();
@@ -4599,28 +4948,27 @@ async function switchToProfile(name) {
     } else {
       // No messages yet — just refresh the list and topbar in place
       await renderSessionList();
+      if (_switchGen !== _profileSwitchGeneration) return;
       syncTopbar();
       // Refresh workspace file tree so the right panel shows the new
       // profile's workspace, not the previous one (#1214).
-      if (S.session && S.session.workspace) loadDir('.');
+      if (S.session && S.session.workspace) {
+        const dirLoad = loadDir('.');
+        if (typeof _workspacePanelMode !== 'undefined' && _workspacePanelMode !== 'closed') await dirLoad;
+      }
       showToast(t('profile_switched', name));
     }
 
-    // ── Sidebar panels ─────────────────────────────────────────────────────
-    if (_currentPanel === 'skills') await loadSkills();
-    if (_currentPanel === 'memory') await loadMemory();
-    if (_currentPanel === 'tasks') await loadCrons();
-    if (_currentPanel === 'kanban') await loadKanban();
-    if (_currentPanel === 'profiles') await loadProfilesPanel();
-    if (_currentPanel === 'workspaces') await loadWorkspacesPanel();
+    await _profileSwitchPanelLoad();
+    _refreshProfileSwitchBackground(_switchGen);
 
   } catch (e) {
     // Revert the optimistic name update on error
-    if (_chipLabel) _chipLabel.textContent = _prevProfileName;
-    showToast(t('switch_failed') + e.message);
+    if (_switchGen === _profileSwitchGeneration && _chipLabel) _chipLabel.textContent = _prevProfileName;
+    if (_switchGen === _profileSwitchGeneration) showToast(t('switch_failed') + e.message);
   } finally {
     // Always remove loading indicator regardless of success or failure
-    if (_chip) { _chip.classList.remove('switching'); _chip.disabled = false; }
+    if (_switchGen === _profileSwitchGeneration && _chip) { _chip.classList.remove('switching'); _chip.disabled = false; }
   }
 }
 
@@ -4651,6 +4999,11 @@ function _renderProfileForm(){
           </label>
         </div>
         <div class="detail-form-row">
+          <label for="profileFormModel">${esc(t('profile_model_label') || 'Model / provider')}</label>
+          <select id="profileFormModel"></select>
+          <div class="detail-form-hint">${esc(t('profile_model_hint') || 'Choose from configured providers and models for this new profile.')}</div>
+        </div>
+        <div class="detail-form-row">
           <label for="profileFormBaseUrl">${esc(t('profile_base_url_label') || 'Base URL')}</label>
           <input type="text" id="profileFormBaseUrl" placeholder="${esc(t('profile_base_url_placeholder') || 'Optional, e.g. http://localhost:11434')}" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
         </div>
@@ -4666,6 +5019,35 @@ function _renderProfileForm(){
   _setProfileHeaderButtons('create');
   const n = $('profileFormName');
   if (n) n.focus();
+  _populateProfileFormModelSelect();
+}
+
+async function _populateProfileFormModelSelect(){
+  const sel = $('profileFormModel');
+  if (!sel) return;
+  sel.innerHTML = `<option value="">${esc(t('profile_model_use_default') || 'Use active profile default')}</option>`;
+  try {
+    const data = await api('/api/models');
+    const groups = (Array.isArray(data && data.groups) && data.groups.length) ? data.groups : [];
+    for (const g of groups) {
+      const og = document.createElement('optgroup');
+      og.label = g.provider || g.provider_id || 'Configured';
+      if (g.provider_id) og.dataset.provider = g.provider_id;
+      for (const m of (Array.isArray(g.models) ? g.models : [])) {
+        if (!m || !m.id) continue;
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = m.label || m.id;
+        og.appendChild(opt);
+      }
+      if (og.children.length) sel.appendChild(og);
+    }
+    if (data && data.default_model && typeof _applyModelToDropdown === 'function') {
+      _applyModelToDropdown(data.default_model, sel, data.active_provider || window._activeProvider || null);
+    }
+  } catch (e) {
+    console.warn('Failed to load profile model picker:', e.message);
+  }
 }
 
 function cancelProfileForm(){
@@ -4682,6 +5064,7 @@ function cancelProfileForm(){
 async function saveProfileForm(){
   const nameEl = $('profileFormName');
   const cloneEl = $('profileFormClone');
+  const modelEl = $('profileFormModel');
   const baseEl = $('profileFormBaseUrl');
   const apiKeyEl = $('profileFormApiKey');
   const errEl = $('profileFormError');
@@ -4696,6 +5079,14 @@ async function saveProfileForm(){
   if (baseUrl && !/^https?:\/\//.test(baseUrl)) { errEl.textContent = t('profile_base_url_rule'); errEl.style.display = ''; return; }
   try {
     const payload = { name, clone_config: cloneConfig };
+    const selectedModel = modelEl ? (modelEl.value || '').trim() : '';
+    if (selectedModel) {
+      const modelState = (typeof _modelStateForSelect === 'function')
+        ? _modelStateForSelect(modelEl, selectedModel)
+        : { model: selectedModel, model_provider: null };
+      if (modelState.model) payload.default_model = modelState.model;
+      if (modelState.model_provider) payload.model_provider = modelState.model_provider;
+    }
     if (baseUrl) payload.base_url = baseUrl;
     if (apiKey) payload.api_key = apiKey;
     await api('/api/profile/create', { method: 'POST', body: JSON.stringify(payload) });
@@ -4792,6 +5183,86 @@ let _settingsAppearanceAutosaveTimer = null;
 let _settingsAppearanceAutosaveRetryPayload = null;
 let _settingsPreferencesAutosaveTimer = null;
 let _settingsPreferencesAutosaveRetryPayload = null;
+
+// ── Sidebar tab visibility ─────────────────────────────────────────────────
+const _ALWAYS_VISIBLE_TABS = new Set(['chat','settings']);
+const _HIDDEN_TABS_LS_KEY = 'hermes-webui-hidden-tabs';
+
+function _getHiddenTabs(){
+  try{var h=localStorage.getItem(_HIDDEN_TABS_LS_KEY);if(h){var p=JSON.parse(h);if(Array.isArray(p))return p;}}catch(e){}
+  return[];
+}
+
+function _setHiddenTabs(panels){
+  try{localStorage.setItem(_HIDDEN_TABS_LS_KEY,JSON.stringify(panels));}catch(e){}
+}
+
+function _applyTabVisibility(hidden){
+  if(!Array.isArray(hidden)) hidden=[];
+  // Hide/unhide all [data-panel] elements (sidebar-nav buttons + rail buttons)
+  document.querySelectorAll('[data-panel]').forEach(function(el){
+    var panel=el.dataset.panel;
+    if(!panel)return;
+    var shouldHide=hidden.indexOf(panel)!==-1;
+    // Never hide always-visible panels (chat, settings) even if present in hidden_tabs
+    if(_ALWAYS_VISIBLE_TABS.has(panel)) shouldHide=false;
+    el.classList.toggle('nav-tab-hidden',shouldHide);
+  });
+  // If the currently active tab is hidden, switch to chat
+  var activeRail=document.querySelector('.rail .rail-btn.nav-tab.active[data-panel]');
+  var activeSidebar=document.querySelector('.sidebar-nav .nav-tab.active[data-panel]');
+  var activeEl=activeRail||activeSidebar;
+  if(activeEl&&activeEl.classList.contains('nav-tab-hidden')){
+    if(typeof switchPanel==='function') switchPanel('chat');
+  }
+}
+
+function _renderTabVisibilityChips(){
+  var container=$('tabVisibilityChips');
+  if(!container)return;
+  var hidden=_getHiddenTabs();
+  // Scan rail buttons to discover all available panels (skip always-visible + dashboard-link)
+  var tabs=document.querySelectorAll('.rail .rail-btn.nav-tab[data-panel]');
+  container.innerHTML='';
+  tabs.forEach(function(tab){
+    var panel=tab.dataset.panel;
+    if(!panel||_ALWAYS_VISIBLE_TABS.has(panel))return;
+    if(tab.classList.contains('dashboard-link'))return;
+    var label=tab.dataset.tooltip||tab.dataset.label||panel;
+    // Capitalize first letter
+    label=label.charAt(0).toUpperCase()+label.slice(1);
+    var chip=document.createElement('button');
+    chip.type='button';
+    chip.className='tab-visibility-chip';
+    var isOff=hidden.indexOf(panel)!==-1;
+    if(isOff)chip.classList.add('chip-off');
+    chip.textContent=label;
+    chip.setAttribute('data-tab-panel',panel);
+    // Use role="switch" + aria-checked instead of aria-pressed so screen
+    // readers narrate "Tasks switch on/off" (matches user mental model) rather
+    // than "Tasks toggle button pressed/not-pressed" (where the polarity is
+    // confusing because chip-off looks like the "off" state).
+    chip.setAttribute('role','switch');
+    chip.setAttribute('aria-checked',isOff?'false':'true');
+    chip.onclick=function(){_toggleTabVisibilityChip(panel);};
+    container.appendChild(chip);
+  });
+}
+
+function _toggleTabVisibilityChip(panel){
+  if(_ALWAYS_VISIBLE_TABS.has(panel))return;
+  var hidden=_getHiddenTabs();
+  var idx=hidden.indexOf(panel);
+  if(idx!==-1){
+    hidden.splice(idx,1);
+  }else{
+    hidden.push(panel);
+  }
+  _setHiddenTabs(hidden);
+  _applyTabVisibility(hidden);
+  _renderTabVisibilityChips();
+  _scheduleAppearanceAutosave();
+}
 
 function switchSettingsSection(name){
   const section=(name==='appearance'||name==='preferences'||name==='providers'||name==='plugins'||name==='system')?name:'conversation';
@@ -4920,6 +5391,7 @@ function _appearancePayloadFromUi(){
     font_size: ($('settingsFontSize')||{}).value || localStorage.getItem('hermes-font-size') || 'default',
     session_jump_buttons: !!($('settingsSessionJumpButtons')||{}).checked,
     session_endless_scroll: !!($('settingsSessionEndlessScroll')||{}).checked,
+    hidden_tabs: _getHiddenTabs(),
   };
 }
 
@@ -4995,24 +5467,38 @@ function _preferencesPayloadFromUi(){
   if(langSel) payload.language=langSel.value;
   const showUsageCb=$('settingsShowTokenUsage');
   if(showUsageCb) payload.show_token_usage=showUsageCb.checked;
+  const showQuotaChipCb=$('settingsShowQuotaChip');
+  if(showQuotaChipCb) payload.show_quota_chip=showQuotaChipCb.checked;
+  const hideSuggestionsCb=$('settingsHideSuggestions');
+  if(hideSuggestionsCb) payload.hide_empty_state_suggestions=hideSuggestionsCb.checked;
   const showTpsCb=$('settingsShowTps');
   if(showTpsCb) payload.show_tps=showTpsCb.checked;
+  const fadeTextCb=$('settingsFadeTextEffect');
+  if(fadeTextCb) payload.fade_text_effect=fadeTextCb.checked;
   const simplifiedToolCb=$('settingsSimplifiedToolCalling');
   if(simplifiedToolCb) payload.simplified_tool_calling=simplifiedToolCb.checked;
   const apiRedactCb=$('settingsApiRedact');
   if(apiRedactCb) payload.api_redact_enabled=apiRedactCb.checked;
   const showCliCb=$('settingsShowCliSessions');
   if(showCliCb) payload.show_cli_sessions=showCliCb.checked;
+  const showPreviousMessagingCb=$('settingsShowPreviousMessagingSessions');
+  if(showPreviousMessagingCb) payload.show_previous_messaging_sessions=showPreviousMessagingCb.checked;
   const syncCb=$('settingsSyncInsights');
   if(syncCb) payload.sync_to_insights=syncCb.checked;
   const updateCb=$('settingsCheckUpdates');
   if(updateCb) payload.check_for_updates=updateCb.checked;
+  const whatsNewSummaryCb=$('settingsWhatsNewSummary');
+  if(whatsNewSummaryCb) payload.whats_new_summary_enabled=whatsNewSummaryCb.checked;
   const soundCb=$('settingsSoundEnabled');
   if(soundCb) payload.sound_enabled=soundCb.checked;
+  const rtlCb=$('settingsRtl');
+  if(rtlCb) payload.rtl=rtlCb.checked;
   const notifCb=$('settingsNotificationsEnabled');
   if(notifCb) payload.notifications_enabled=notifCb.checked;
   const sidebarDensitySel=$('settingsSidebarDensity');
   if(sidebarDensitySel) payload.sidebar_density=sidebarDensitySel.value;
+  const pinnedLimitField=$('settingsPinnedSessionsLimit');
+  if(pinnedLimitField) payload.pinned_sessions_limit=parseInt(pinnedLimitField.value,10);
   const autoTitleRefreshSel=$('settingsAutoTitleRefresh');
   if(autoTitleRefreshSel) payload.auto_title_refresh_every=parseInt(autoTitleRefreshSel.value,10);
   const busyInputModeSel=$('settingsBusyInputMode');
@@ -5063,10 +5549,16 @@ async function _autosavePreferencesSettings(payload){
       if(typeof clearMessageRenderCache==='function') clearMessageRenderCache();
       if(typeof renderMessages==='function') renderMessages();
     }
+    if(payload&&Object.prototype.hasOwnProperty.call(payload,'fade_text_effect')) window._fadeTextEffect=!!payload.fade_text_effect;
+    if(saved&&Object.prototype.hasOwnProperty.call(saved,'pinned_sessions_limit')) window._pinnedSessionsLimit=parseInt(saved.pinned_sessions_limit,10)||3;
     if(payload&&payload.show_tps!==undefined){
       window._showTps=!!(saved&&saved.show_tps);
       if(typeof clearMessageRenderCache==='function') clearMessageRenderCache();
       if(typeof renderMessages==='function') renderMessages();
+    }
+    if(payload&&payload.hide_empty_state_suggestions!==undefined){
+      window._hideEmptyStateSuggestions=!!(saved&&saved.hide_empty_state_suggestions);
+      if(typeof applyEmptyStateSuggestionPref==='function') applyEmptyStateSuggestionPref();
     }
     _settingsPreferencesAutosaveRetryPayload=null;
     _setPreferencesAutosaveStatus('saved');
@@ -5164,6 +5656,18 @@ async function loadSettingsPanel(){
         _scheduleAppearanceAutosave();
       };
     }
+    // Tab visibility chips (dynamically populated from DOM)
+    var hiddenTabs=[];
+    if(Array.isArray(settings.hidden_tabs)){
+      // Server value takes priority — even an empty array means "no tabs hidden"
+      hiddenTabs=settings.hidden_tabs.filter(function(s){return typeof s==='string'&&s.trim();});
+    }else{
+      // Server has no hidden_tabs key — fall back to localStorage
+      hiddenTabs=_getHiddenTabs();
+    }
+    _setHiddenTabs(hiddenTabs);
+    _applyTabVisibility(hiddenTabs);
+    _renderTabVisibilityChips();
     const resolvedLanguage=(typeof resolvePreferredLocale==='function')
       ? resolvePreferredLocale(settings.language, localStorage.getItem('hermes-lang'))
       : (settings.language || localStorage.getItem('hermes-lang') || 'en');
@@ -5228,20 +5732,70 @@ async function loadSettingsPanel(){
     }
     const showUsageCb=$('settingsShowTokenUsage');
     if(showUsageCb){showUsageCb.checked=!!settings.show_token_usage;showUsageCb.addEventListener('change',_schedulePreferencesAutosave,{once:false});}
+    // Ambient provider quota chip toggle — default off; only shows at ≥1400px viewport
+    // when enabled (see style.css @media (max-width:1399.98px) rule).
+    const showQuotaChipCb=$('settingsShowQuotaChip');
+    if(showQuotaChipCb){
+      showQuotaChipCb.checked=settings.show_quota_chip===true;
+      window._showQuotaChip=showQuotaChipCb.checked;
+      showQuotaChipCb.addEventListener('change',()=>{
+        window._showQuotaChip=showQuotaChipCb.checked;
+        if(typeof refreshProviderQuotaIndicator==='function') refreshProviderQuotaIndicator();
+        _schedulePreferencesAutosave();
+      },{once:false});
+    }
+    const hideSuggestionsCb=$('settingsHideSuggestions');
+    if(hideSuggestionsCb){
+      hideSuggestionsCb.checked=settings.hide_empty_state_suggestions===true;
+      window._hideEmptyStateSuggestions=hideSuggestionsCb.checked;
+      if(typeof applyEmptyStateSuggestionPref==='function') applyEmptyStateSuggestionPref();
+      hideSuggestionsCb.addEventListener('change',()=>{
+        window._hideEmptyStateSuggestions=hideSuggestionsCb.checked;
+        if(typeof applyEmptyStateSuggestionPref==='function') applyEmptyStateSuggestionPref();
+        _schedulePreferencesAutosave();
+      },{once:false});
+    }
     const showTpsCb=$('settingsShowTps');
     if(showTpsCb){showTpsCb.checked=!!settings.show_tps;showTpsCb.addEventListener('change',_schedulePreferencesAutosave,{once:false});}
+    const pinnedLimitField=$('settingsPinnedSessionsLimit');
+    if(pinnedLimitField){
+      pinnedLimitField.value=parseInt(settings.pinned_sessions_limit||3,10)||3;
+      window._pinnedSessionsLimit=parseInt(pinnedLimitField.value,10)||3;
+      pinnedLimitField.addEventListener('change',_schedulePreferencesAutosave,{once:false});
+      pinnedLimitField.addEventListener('input',()=>{window._pinnedSessionsLimit=parseInt(pinnedLimitField.value,10)||3;_schedulePreferencesAutosave();},{once:false});
+    }
+    const fadeTextCb=$('settingsFadeTextEffect');
+    if(fadeTextCb){fadeTextCb.checked=!!settings.fade_text_effect;window._fadeTextEffect=fadeTextCb.checked;fadeTextCb.addEventListener('change',_schedulePreferencesAutosave,{once:false});}
     const simplifiedToolCb=$('settingsSimplifiedToolCalling');
     if(simplifiedToolCb){simplifiedToolCb.checked=settings.simplified_tool_calling!==false;simplifiedToolCb.addEventListener('change',_schedulePreferencesAutosave,{once:false});}
     const apiRedactCb=$('settingsApiRedact');
     if(apiRedactCb){apiRedactCb.checked=settings.api_redact_enabled!==false;apiRedactCb.addEventListener('change',_schedulePreferencesAutosave,{once:false});}
     const showCliCb=$('settingsShowCliSessions');
     if(showCliCb){showCliCb.checked=!!settings.show_cli_sessions;showCliCb.addEventListener('change',_schedulePreferencesAutosave,{once:false});}
+    const showPreviousMessagingCb=$('settingsShowPreviousMessagingSessions');
+    if(showPreviousMessagingCb){showPreviousMessagingCb.checked=!!settings.show_previous_messaging_sessions;showPreviousMessagingCb.addEventListener('change',_schedulePreferencesAutosave,{once:false});}
     const syncCb=$('settingsSyncInsights');
     if(syncCb){syncCb.checked=!!settings.sync_to_insights;syncCb.addEventListener('change',_schedulePreferencesAutosave,{once:false});}
     const updateCb=$('settingsCheckUpdates');
     if(updateCb){updateCb.checked=settings.check_for_updates!==false;updateCb.addEventListener('change',_schedulePreferencesAutosave,{once:false});}
+    const whatsNewSummaryCb=$('settingsWhatsNewSummary');
+    if(whatsNewSummaryCb){whatsNewSummaryCb.checked=!!settings.whats_new_summary_enabled;whatsNewSummaryCb.addEventListener('change',_schedulePreferencesAutosave,{once:false});}
     const soundCb=$('settingsSoundEnabled');
     if(soundCb){soundCb.checked=!!settings.sound_enabled;soundCb.addEventListener('change',_schedulePreferencesAutosave,{once:false});}
+    // Right-to-left chat layout (#1721 salvage) — Settings-only, no composer button.
+    const rtlCb=$('settingsRtl');
+    if(rtlCb){
+      const saved=!!settings.rtl || localStorage.getItem('hermes-rtl')==='true';
+      rtlCb.checked=saved;
+      try{localStorage.setItem('hermes-rtl',saved?'true':'false');}catch(_){}
+      document.documentElement.classList.toggle('chat-content-rtl',saved);
+      rtlCb.addEventListener('change',()=>{
+        const on=rtlCb.checked;
+        try{localStorage.setItem('hermes-rtl',on?'true':'false');}catch(_){}
+        document.documentElement.classList.toggle('chat-content-rtl',on);
+        _schedulePreferencesAutosave();
+      },{once:false});
+    }
     // TTS settings (localStorage-only, no server round-trip needed)
     const ttsEnabledCb=$('settingsTtsEnabled');
     if(ttsEnabledCb){ttsEnabledCb.checked=localStorage.getItem('hermes-tts-enabled')==='true';ttsEnabledCb.onchange=function(){localStorage.setItem('hermes-tts-enabled',this.checked?'true':'false');_applyTtsEnabled(this.checked);};}
@@ -5386,7 +5940,7 @@ async function loadPluginsPanel(){
       list.appendChild(_buildPluginCard(plugin));
     }
   }catch(e){
-    list.innerHTML='<div style="color:var(--error);padding:12px;font-size:13px">Failed to load plugins: '+esc(e.message||String(e))+'</div>';
+    list.innerHTML='<div style="color:var(--error);padding:12px;font-size:13px">'+t('plugins_load_failed')+esc(e.message||String(e))+'</div>';
   }
 }
 
@@ -5394,24 +5948,46 @@ function _buildPluginCard(plugin){
   const card=document.createElement('div');
   card.className='provider-card plugin-card';
   card.dataset.plugin=(plugin&&plugin.key)||'';
+  // `activation` is the canonical state from /api/plugins (added in #2659).
+  // Fall back to the older `enabled` boolean when the field is missing so
+  // the panel still works against older backends.
+  const activation=(plugin&&typeof plugin.activation==='string')
+    ? plugin.activation
+    : (plugin&&plugin.enabled===false ? 'disabled' : 'enabled');
+  const isProvider=activation==='exclusive'||activation==='provider';
   const hooks=Array.isArray(plugin&&plugin.hooks)?plugin.hooks:[];
+  // Provider plugins (memory/web/browser/etc.) register hooks on their
+  // category's dispatcher, not the four agent-wide visibility hooks the
+  // payload filters to. Show an explanatory line instead of the generic
+  // "No registered lifecycle hooks" when the visibility-hook list is empty.
   const hookHtml=hooks.length
     ? hooks.map(h=>`<span class="plugin-hook-badge">${esc(h)}</span>`).join('')
-    : '<span class="plugin-hook-empty">No registered lifecycle hooks</span>';
-  const version=(plugin&&plugin.version)?` · v${esc(plugin.version)}`:'';
-  const desc=(plugin&&plugin.description)?esc(plugin.description):'No description provided.';
-  const enabled=plugin&&plugin.enabled!==false;
+    : '<span class="plugin-hook-empty">'+t(isProvider?'plugins_provider_no_hooks':'plugins_no_hooks')+'</span>';
+  const version=(plugin&&plugin.version)?' · v'+esc(plugin.version):'';
+  const desc=(plugin&&plugin.description)?esc(plugin.description):t('plugins_no_description');
+  let badgeText;
+  let badgeClass;
+  if(isProvider){
+    badgeText=t('plugins_active_provider');
+    badgeClass='plugin-card-badge-provider';
+  }else if(activation==='enabled'){
+    badgeText=t('plugins_enabled');
+    badgeClass='';
+  }else{
+    badgeText=t('plugins_disabled');
+    badgeClass='plugin-card-badge-disabled';
+  }
   card.innerHTML=`
     <div class="provider-card-header plugin-card-header">
       <div class="provider-card-info">
-        <div class="provider-card-name">${esc((plugin&&plugin.name)||'Unnamed plugin')}</div>
+        <div class="provider-card-name">${esc((plugin&&plugin.name)||t('plugins_unnamed'))}</div>
         <div class="provider-card-meta">${esc((plugin&&plugin.key)||'plugin')}${version}</div>
       </div>
-      <span class="provider-card-badge ${enabled?'':'plugin-card-badge-disabled'}">${enabled?'Enabled':'Disabled'}</span>
+      <span class="provider-card-badge ${badgeClass}">${badgeText}</span>
     </div>
     <div class="provider-card-body plugin-card-body">
       <div class="provider-card-hint">${desc}</div>
-      <div class="provider-card-label">Registered hooks</div>
+      <div class="provider-card-label">${t('plugins_registered_hooks')}</div>
       <div class="plugin-hook-list">${hookHtml}</div>
     </div>
   `;
@@ -5422,14 +5998,21 @@ function _buildPluginCard(plugin){
 
 const _providerCardEls = new Map(); // providerId → {card, statusDot, input, saveBtn, removeBtn}
 
+async function _fetchProviderQuotaStatus(force=false){
+  const endpoint=force?`/api/provider/quota?refresh=1&ts=${Date.now()}`:'/api/provider/quota';
+  const status=await api(endpoint,{cache:'no-store'});
+  if(status&&typeof status==='object') status.client_fetched_at=new Date().toISOString();
+  return status;
+}
+
 async function loadProvidersPanel(){
   const list=$('providersList');
   const empty=$('providersEmpty');
   if(!list) return;
   try{
     const data=await api('/api/providers');
-    const quota=await api('/api/provider/quota').catch(e=>({ok:false,status:'unavailable',quota:null,message:e.message||'Quota status unavailable'}));
-    const providers=(data.providers||[]).filter(p=>p.configurable||p.is_oauth);
+    const quota=await _fetchProviderQuotaStatus(false).catch(e=>({ok:false,status:'unavailable',quota:null,message:e.message||t('provider_quota_unavailable'),client_fetched_at:new Date().toISOString()}));
+    const providers=(data.providers||[]).filter(p=>p.configurable||p.is_oauth||p.is_custom);
     list.innerHTML='';
     _providerCardEls.clear();
     const quotaCard=_buildProviderQuotaCard(quota);
@@ -5445,8 +6028,42 @@ async function loadProvidersPanel(){
       list.appendChild(_buildProviderCard(p));
     }
   }catch(e){
-    list.innerHTML='<div style="color:var(--error);padding:12px;font-size:13px">Failed to load providers: '+e.message+'</div>';
+    list.innerHTML='<div style="color:var(--error);padding:12px;font-size:13px">Failed to load providers: '+esc(e.message||String(e))+'</div>';
   }
+}
+
+async function _refreshProviderQuota(card,button){
+  if(!card) return;
+  if(button){
+    button.disabled=true;
+    button.textContent=t('provider_quota_refreshing');
+    button.setAttribute('aria-busy','true');
+  }
+  let failed=false;
+  let next;
+  try{
+    next=await _fetchProviderQuotaStatus(true);
+    failed=next&&next.ok===false;
+  }catch(e){
+    failed=true;
+    next={ok:false,status:'unavailable',quota:null,message:e.message||t('provider_quota_unavailable'),client_fetched_at:new Date().toISOString()};
+  }
+  try{
+    const fresh=_buildProviderQuotaCard(next);
+    if(fresh){
+      card.replaceWith(fresh);
+      if(typeof showToast==='function') showToast(failed?t('provider_quota_refresh_failed'):t('provider_quota_refresh_succeeded'));
+      return;
+    }
+  }catch(e){
+    failed=true;
+  }
+  if(card.isConnected&&button){
+    button.disabled=false;
+    button.textContent=t('provider_quota_refresh_usage');
+    button.removeAttribute('aria-busy');
+  }
+  if(typeof showToast==='function') showToast(t('provider_quota_refresh_failed'));
 }
 
 function _formatProviderQuotaMoney(value){
@@ -5471,13 +6088,127 @@ function _formatProviderQuotaReset(value){
 }
 
 function _formatProviderQuotaWindowLabel(accountLimits,w){
-  const raw=((w&&w.label)||'Window').trim();
+  const raw=((w&&w.label)||t('provider_quota_window_fallback')).trim();
   const provider=((accountLimits&&accountLimits.provider)||'').toLowerCase();
   if(provider==='openai-codex'){
-    if(raw.toLowerCase()==='session') return '5-hour limit';
-    if(raw.toLowerCase()==='weekly') return 'Weekly limit';
+    if(raw.toLowerCase()==='session') return t('provider_quota_session_limit');
+    if(raw.toLowerCase()==='weekly') return t('provider_quota_weekly_limit');
   }
-  return raw||'Window';
+  return raw||t('provider_quota_window_fallback');
+}
+
+function _formatProviderQuotaLastChecked(status){
+  const accountLimits=status&&status.account_limits;
+  const value=(accountLimits&&accountLimits.fetched_at)||status&&status.client_fetched_at;
+  if(!value) return t('provider_quota_last_checked_after_refresh');
+  const d=new Date(value);
+  if(Number.isNaN(d.getTime())) return t('provider_quota_last_checked_after_refresh');
+  try{return t('provider_quota_last_checked',d.toLocaleString());}catch(e){return t('provider_quota_last_checked',value);}
+}
+
+function _providerQuotaStateClass(value){
+  return String(value||'unavailable').replace(/[^a-z0-9_-]/gi,'').toLowerCase()||'unavailable';
+}
+
+function _providerQuotaStatusLabel(value){
+  const state=_providerQuotaStateClass(value);
+  const key={
+    available:'provider_quota_status_available',
+    exhausted:'provider_quota_status_exhausted',
+    unavailable:'provider_quota_status_unavailable',
+    failed:'provider_quota_status_failed',
+    checked:'provider_quota_status_checked',
+    no_key:'provider_quota_status_no_key',
+    invalid_key:'provider_quota_status_invalid_key',
+    unsupported:'provider_quota_status_unsupported',
+  }[state];
+  return key?t(key):state.replace(/_/g,' ');
+}
+
+function _providerQuotaWindowMeta(used,reset){
+  const meta=[];
+  if(used!=='—') meta.push(t('provider_quota_used_meta',used));
+  if(reset) meta.push(t('provider_quota_resets_meta',reset));
+  return meta;
+}
+
+function _providerQuotaRetryAfterText(value){
+  const retry=_formatProviderQuotaReset(value);
+  return retry?t('provider_quota_retry_after',retry):'';
+}
+
+function _providerQuotaUnavailableReason(credential){
+  const structured=_providerQuotaRetryAfterText(credential&&credential.retry_after);
+  if(structured) return structured;
+  const raw=String((credential&&credential.unavailable_reason)||'').trim();
+  const match=raw.match(/\bretry after\s+([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.+-]+Z?)/i);
+  if(match){
+    const parsed=_providerQuotaRetryAfterText(match[1]);
+    if(parsed) return parsed;
+  }
+  return raw;
+}
+
+function _providerQuotaPoolShouldDefaultOpen(pool){
+  try{
+    const saved=localStorage.getItem('hermes-provider-quota-pool-open');
+    if(saved==='1') return true;
+    if(saved==='0') return false;
+  }catch(e){}
+  const count=Array.isArray(pool&&pool.credentials)?pool.credentials.length:0;
+  return count>0&&count<=3;
+}
+
+function _buildProviderQuotaPoolBreakdown(accountLimits){
+  const pool=accountLimits&&accountLimits.pool;
+  if(!pool||!Array.isArray(pool.credentials)||pool.credentials.length===0) return '';
+  const defaultOpen=_providerQuotaPoolShouldDefaultOpen(pool);
+  const total=Number.isFinite(Number(pool.total_credentials))?Number(pool.total_credentials):pool.credentials.length;
+  const available=Number.isFinite(Number(pool.available_credentials))?Number(pool.available_credentials):pool.credentials.filter(c=>c&&c.status==='available').length;
+  const exhausted=Number.isFinite(Number(pool.exhausted_credentials))?Number(pool.exhausted_credentials):0;
+  const failed=Number.isFinite(Number(pool.failed_credentials))?Number(pool.failed_credentials):0;
+  const queried=Number.isFinite(Number(pool.queried_credentials))?Number(pool.queried_credentials):0;
+  const summaryParts=[t('provider_quota_pool_summary_available',available,total)];
+  if(exhausted>0) summaryParts.push(t('provider_quota_pool_summary_exhausted',exhausted));
+  if(failed>0) summaryParts.push(t('provider_quota_pool_summary_failed',failed));
+  if(queried>0) summaryParts.push(t('provider_quota_pool_summary_checked',queried));
+  const planParts=Array.isArray(pool.plans)?pool.plans.filter(Boolean):[];
+  const rows=pool.credentials.map((credential,idx)=>{
+    const label=(credential&&credential.label)||t('provider_quota_credential_label',idx+1);
+    const status=_providerQuotaStateClass(credential&&credential.status);
+    const statusText=_providerQuotaStatusLabel(credential&&credential.status);
+    const plan=credential&&credential.plan?` · ${credential.plan}`:'';
+    const windows=Array.isArray(credential&&credential.windows)?credential.windows:[];
+    const details=Array.isArray(credential&&credential.details)?credential.details.filter(Boolean):[];
+    const unavailableReason=_providerQuotaUnavailableReason(credential);
+    const windowHtml=windows.length?windows.map(w=>{
+      const remaining=_formatProviderQuotaPercent(w&&w.remaining_percent);
+      const used=_formatProviderQuotaPercent(w&&w.used_percent);
+      const reset=_formatProviderQuotaReset(w&&w.reset_at);
+      const meta=_providerQuotaWindowMeta(used,reset);
+      const detail=(w&&w.detail)?String(w.detail).trim():'';
+      return `<div class="provider-quota-pool-window"><span>${esc(_formatProviderQuotaWindowLabel(accountLimits,w))}</span><strong>${esc(remaining)}</strong>${meta.length?`<small>${esc(meta.join(' · '))}</small>`:''}${detail?`<small class="provider-quota-window-detail">${esc(detail)}</small>`:''}</div>`;
+    }).join(''):`<div class="provider-quota-pool-note">${esc(unavailableReason||t('provider_quota_pool_no_windows'))}</div>`;
+    const detailHtml=details.length?`<div class="provider-quota-pool-details">${details.map(d=>`<span>${esc(d)}</span>`).join('')}</div>`:'';
+    return `
+      <div class="provider-quota-pool-row provider-quota-pool-row-${status}">
+        <div class="provider-quota-pool-row-head">
+          <span>${esc(label)}${esc(plan)}</span>
+          <strong>${esc(statusText)}</strong>
+        </div>
+        <div class="provider-quota-pool-windows">${windowHtml}</div>
+        ${detailHtml}
+      </div>
+    `;
+  }).join('');
+  const planText=planParts.length?`<div class="provider-quota-pool-plans">${esc(t('provider_quota_pool_plans',planParts.join(', ')))}</div>`:'';
+  return `
+    <details class="provider-quota-pool"${defaultOpen?' open':''}>
+      <summary><span class="provider-quota-pool-summary-label"><span class="provider-quota-pool-chevron" aria-hidden="true"></span><span>${esc(t('provider_quota_credential_pool'))}</span></span><strong>${esc(summaryParts.join(' · '))}</strong></summary>
+      ${planText}
+      <div class="provider-quota-pool-rows">${rows}</div>
+    </details>
+  `;
 }
 
 function _buildProviderQuotaCard(status){
@@ -5486,52 +6217,64 @@ function _buildProviderQuotaCard(status){
   const state=(status.status||'unavailable').replace(/[^a-z0-9_-]/gi,'').toLowerCase()||'unavailable';
   card.className='provider-quota-card provider-quota-card-'+state;
   const accountLimits=status.account_limits||null;
-  const providerBase=status.display_name||status.provider||'Active provider';
+  const providerBase=status.display_name||status.provider||t('provider_quota_active_provider');
   const provider=(accountLimits&&accountLimits.plan)?`${providerBase} · ${accountLimits.plan}`:providerBase;
   const quota=status.quota||null;
   let body='';
-  if(status.status==='available'&&accountLimits){
+  if(accountLimits&&(status.status==='available'||accountLimits.pool)){
     const windows=Array.isArray(accountLimits.windows)?accountLimits.windows:[];
-    const details=Array.isArray(accountLimits.details)?accountLimits.details:[];
+    const details=Array.isArray(accountLimits.details)&&!accountLimits.pool?accountLimits.details:[];
     const windowHtml=windows.map(w=>{
       const used=_formatProviderQuotaPercent(w&&w.used_percent);
       const reset=_formatProviderQuotaReset(w&&w.reset_at);
-      const meta=[];
-      if(used!=='—') meta.push(`${used} used`);
-      if(reset) meta.push(`resets ${reset}`);
-      if(w&&w.detail) meta.push(w.detail);
+      const meta=_providerQuotaWindowMeta(used,reset);
+      const detail=(w&&w.detail)?String(w.detail).trim():'';
       return `
         <div class="provider-quota-metric provider-quota-window">
           <span>${esc(_formatProviderQuotaWindowLabel(accountLimits,w))}</span>
           <strong>${esc(_formatProviderQuotaPercent(w&&w.remaining_percent))}</strong>
           ${meta.length?`<small>${esc(meta.join(' · '))}</small>`:''}
+          ${detail?`<small class="provider-quota-window-detail">${esc(detail)}</small>`:''}
         </div>
       `;
     }).join('');
     const detailHtml=details.length
       ? `<div class="provider-quota-details">${details.map(d=>`<span>${esc(d)}</span>`).join('')}</div>`
       : '';
-    body=windowHtml+detailHtml;
-    if(!body) body=`<div class="provider-quota-message">${esc(status.message||'Account limits loaded.')}</div>`;
+    const poolHtml=_buildProviderQuotaPoolBreakdown(accountLimits);
+    body=windowHtml+detailHtml+poolHtml;
+    if(!body) body=`<div class="provider-quota-message">${esc(status.message||t('provider_quota_account_limits_loaded'))}</div>`;
   }else if(status.status==='available'&&quota){
     body=`
-      <div class="provider-quota-metric"><span>Remaining</span><strong>${esc(_formatProviderQuotaMoney(quota.limit_remaining))}</strong></div>
-      <div class="provider-quota-metric"><span>Used</span><strong>${esc(_formatProviderQuotaMoney(quota.usage))}</strong></div>
-      <div class="provider-quota-metric"><span>Limit</span><strong>${esc(_formatProviderQuotaMoney(quota.limit))}</strong></div>
+      <div class="provider-quota-metric"><span>${esc(t('provider_quota_metric_remaining'))}</span><strong>${esc(_formatProviderQuotaMoney(quota.limit_remaining))}</strong></div>
+      <div class="provider-quota-metric"><span>${esc(t('provider_quota_metric_used'))}</span><strong>${esc(_formatProviderQuotaMoney(quota.usage))}</strong></div>
+      <div class="provider-quota-metric"><span>${esc(t('provider_quota_metric_limit'))}</span><strong>${esc(_formatProviderQuotaMoney(quota.limit))}</strong></div>
     `;
   }else{
-    body=`<div class="provider-quota-message">${esc(status.message||'Quota status unavailable')}</div>`;
+    body=`<div class="provider-quota-message">${esc(status.message||t('provider_quota_unavailable'))}</div>`;
   }
   card.innerHTML=`
     <div class="provider-quota-header">
       <div>
-        <div class="provider-quota-title">Active provider quota</div>
+        <div class="provider-quota-title">${esc(t('provider_quota_title'))}</div>
         <div class="provider-quota-subtitle">${esc(provider)}</div>
+        <div class="provider-quota-checked">${esc(_formatProviderQuotaLastChecked(status))}</div>
       </div>
-      <span class="provider-quota-badge">${esc(state.replace(/_/g,' '))}</span>
+      <div class="provider-quota-actions">
+        <span class="provider-quota-badge">${esc(_providerQuotaStatusLabel(state))}</span>
+        <button class="provider-quota-refresh" type="button" data-provider-quota-refresh title="${esc(t('provider_quota_refresh_title'))}">${esc(t('provider_quota_refresh_usage'))}</button>
+      </div>
     </div>
     <div class="provider-quota-body">${body}</div>
   `;
+  const refreshBtn=card.querySelector('[data-provider-quota-refresh]');
+  if(refreshBtn) refreshBtn.addEventListener('click',()=>_refreshProviderQuota(card,refreshBtn));
+  const poolDetails=card.querySelector('.provider-quota-pool');
+  if(poolDetails){
+    poolDetails.addEventListener('toggle',()=>{
+      try{localStorage.setItem('hermes-provider-quota-pool-open',poolDetails.open?'1':'0');}catch(e){}
+    });
+  }
   return card;
 }
 
@@ -5596,48 +6339,59 @@ function _buildProviderCard(p){
     return card;
   }
 
-  const field=document.createElement('div');
-  field.className='provider-card-field';
-  const label=document.createElement('label');
-  label.className='provider-card-label';
-  label.textContent=t('providers_status_api_key');
-  field.appendChild(label);
+  let input=null;
+  let saveBtn=null;
+  if(p.configurable){
+    const field=document.createElement('div');
+    field.className='provider-card-field';
+    const label=document.createElement('label');
+    label.className='provider-card-label';
+    label.textContent=t('providers_status_api_key');
+    field.appendChild(label);
 
-  const row=document.createElement('div');
-  row.className='provider-card-row';
-  const input=document.createElement('input');
-  input.type='password';
-  input.className='provider-card-input';
-  input.placeholder=p.has_key?t('providers_key_placeholder_replace'):t('providers_key_placeholder_new');
-  input.autocomplete='off';
-  const toggleBtn=document.createElement('button');
-  toggleBtn.type='button';
-  toggleBtn.className='provider-card-btn provider-card-btn-ghost';
-  toggleBtn.textContent='Show';
-  toggleBtn.onclick=()=>{
-    const revealed=input.type==='text';
-    input.type=revealed?'password':'text';
-    toggleBtn.textContent=revealed?'Show':'Hide';
-  };
-  const saveBtn=document.createElement('button');
-  saveBtn.type='button';
-  saveBtn.className='provider-card-btn provider-card-btn-primary';
-  saveBtn.textContent=t('providers_save');
-  saveBtn.onclick=()=>_saveProviderKey(p.id);
-  saveBtn.disabled=true;
-  row.appendChild(input);
-  row.appendChild(toggleBtn);
-  row.appendChild(saveBtn);
-  if(p.has_key){
-    const removeBtn=document.createElement('button');
-    removeBtn.type='button';
-    removeBtn.className='provider-card-btn provider-card-btn-danger';
-    removeBtn.textContent=t('providers_remove');
-    removeBtn.onclick=()=>_removeProviderKey(p.id);
-    row.appendChild(removeBtn);
+    const row=document.createElement('div');
+    row.className='provider-card-row';
+    input=document.createElement('input');
+    input.type='password';
+    input.className='provider-card-input';
+    input.placeholder=p.has_key?t('providers_key_placeholder_replace'):t('providers_key_placeholder_new');
+    input.autocomplete='off';
+    const toggleBtn=document.createElement('button');
+    toggleBtn.type='button';
+    toggleBtn.className='provider-card-btn provider-card-btn-ghost';
+    toggleBtn.textContent='Show';
+    toggleBtn.onclick=()=>{
+      const revealed=input.type==='text';
+      input.type=revealed?'password':'text';
+      toggleBtn.textContent=revealed?'Show':'Hide';
+    };
+    saveBtn=document.createElement('button');
+    saveBtn.type='button';
+    saveBtn.className='provider-card-btn provider-card-btn-primary';
+    saveBtn.textContent=t('providers_save');
+    saveBtn.onclick=()=>_saveProviderKey(p.id);
+    saveBtn.disabled=true;
+    row.appendChild(input);
+    row.appendChild(toggleBtn);
+    row.appendChild(saveBtn);
+    if(p.has_key){
+      const removeBtn=document.createElement('button');
+      removeBtn.type='button';
+      removeBtn.className='provider-card-btn provider-card-btn-danger';
+      removeBtn.textContent=t('providers_remove');
+      removeBtn.onclick=()=>_removeProviderKey(p.id);
+      row.appendChild(removeBtn);
+    }
+    field.appendChild(row);
+    body.appendChild(field);
+  }else{
+    const hint=document.createElement('div');
+    hint.className='provider-card-hint';
+    hint.textContent=p.is_custom
+      ? 'Custom provider loaded from config.yaml / hermes model. Edit it from the CLI or config file.'
+      : 'Provider is managed outside the WebUI.';
+    body.appendChild(hint);
   }
-  field.appendChild(row);
-  body.appendChild(field);
 
   // Model list — show when provider has known models
   if(modelCount>0){
@@ -5691,8 +6445,10 @@ function _buildProviderCard(p){
   body.appendChild(refreshRow);
   card.appendChild(body);
 
-  _providerCardEls.set(p.id,{card,input,saveBtn,hasKey:p.has_key});
-  input.addEventListener('input',()=>{saveBtn.disabled=!input.value.trim();});
+  if(input&&saveBtn){
+    _providerCardEls.set(p.id,{card,input,saveBtn,hasKey:p.has_key});
+    input.addEventListener('input',()=>{saveBtn.disabled=!input.value.trim();});
+  }
   header.addEventListener('click',e=>{
     // Don't toggle when clicking inside body (defensive; body isn't inside header)
     if(e.target.closest('.provider-card-body')) return;
@@ -5809,13 +6565,17 @@ function _setSettingsAuthButtonsVisible(active){
 }
 
 function _applySavedSettingsUi(saved, body, opts){
-  const {sendKey,showTokenUsage,showTps,showCliSessions,theme,skin,language,sidebarDensity,fontSize}=opts;
+  const {sendKey,showTokenUsage,showQuotaChip,showTps,fadeTextEffect,showCliSessions,theme,skin,language,sidebarDensity,fontSize}=opts;
   window._sendKey=sendKey||'enter';
   window._showTokenUsage=showTokenUsage;
+  window._showQuotaChip=showQuotaChip===true;
   window._showTps=showTps;
+  window._fadeTextEffect=!!fadeTextEffect;
   window._showCliSessions=showCliSessions;
+  window._showPreviousMessagingSessions=!!body.show_previous_messaging_sessions;
   window._soundEnabled=body.sound_enabled;
   window._notificationsEnabled=body.notifications_enabled;
+  window._whatsNewSummaryEnabled=!!body.whats_new_summary_enabled;
   window._showThinking=body.show_thinking!==false;
   window._simplifiedToolCalling=body.simplified_tool_calling!==false;
   window._sessionJumpButtonsEnabled=!!body.session_jump_buttons;
@@ -5859,10 +6619,18 @@ async function checkUpdatesNow(){
   if(label) label.textContent=t('settings_checking');
   if(status) status.textContent='';
   try {
-    const data=await api('/api/updates/check?force=1');
+    const data=await api('/api/updates/check?force=1',{timeoutMs:60000});
     if(data.disabled){
       if(status){status.textContent=t('settings_updates_disabled');status.style.color='var(--muted)';}
     } else {
+      const errorParts=[];
+      const formatUpdateError=(typeof _formatUpdateCheckError==='function')
+        ? _formatUpdateCheckError
+        : ((label,info)=>info&&info.error?label:null);
+      const webuiError=formatUpdateError('WebUI',data.webui);
+      const agentError=formatUpdateError('Agent',data.agent);
+      if(webuiError) errorParts.push(webuiError);
+      if(agentError) errorParts.push(agentError);
       const parts=[];
       const formatUpdatePart=(typeof _formatUpdateTargetStatus==='function')
         ? _formatUpdateTargetStatus
@@ -5875,8 +6643,11 @@ async function checkUpdatesNow(){
         if(status){status.textContent=t('settings_updates_available').replace('{count}',parts.join(', '));status.style.color='var(--accent)';}
         // Also trigger the update banner
         if(typeof _showUpdateBanner==='function') _showUpdateBanner(data);
+      } else if(errorParts.length){
+        if(status){status.textContent=t('settings_update_check_failed')+': '+errorParts.join(', ');status.style.color='var(--error)';}
       } else {
         if(status){status.textContent=t('settings_up_to_date');status.style.color='var(--success)';}
+        if(typeof _showUpdateBanner==='function') _showUpdateBanner(data);
       }
     }
   } catch(e){
@@ -5903,8 +6674,12 @@ async function saveSettings(andClose){
   const modelChanged=(model||'')!==(_settingsHermesDefaultModelOnOpen||'');
   const sendKey=($('settingsSendKey')||{}).value;
   const showTokenUsage=!!($('settingsShowTokenUsage')||{}).checked;
+  const showQuotaChip=!!($('settingsShowQuotaChip')||{}).checked;
   const showTps=!!($('settingsShowTps')||{}).checked;
+  const fadeTextEffect=!!($('settingsFadeTextEffect')||{}).checked;
   const showCliSessions=!!($('settingsShowCliSessions')||{}).checked;
+  const showPreviousMessagingSessions=!!($('settingsShowPreviousMessagingSessions')||{}).checked;
+  const pinnedSessionsLimit=parseInt(($('settingsPinnedSessionsLimit')||{}).value,10)||3;
   const pw=($('settingsPassword')||{}).value;
   const theme=($('settingsTheme')||{}).value||'dark';
   const skin=($('settingsSkin')||{}).value||'default';
@@ -5922,13 +6697,19 @@ async function saveSettings(andClose){
   body.session_endless_scroll=!!($('settingsSessionEndlessScroll')||{}).checked;
   body.language=language;
   body.show_token_usage=showTokenUsage;
+  body.show_quota_chip=showQuotaChip===true;
   body.show_tps=showTps;
+  body.fade_text_effect=fadeTextEffect;
   body.simplified_tool_calling=!!($('settingsSimplifiedToolCalling')||{}).checked;
   body.api_redact_enabled=!!($('settingsApiRedact')||{}).checked;
   body.show_cli_sessions=showCliSessions;
+  body.show_previous_messaging_sessions=showPreviousMessagingSessions;
+  body.pinned_sessions_limit=pinnedSessionsLimit;
   body.sync_to_insights=!!($('settingsSyncInsights')||{}).checked;
   body.check_for_updates=!!($('settingsCheckUpdates')||{}).checked;
+  body.whats_new_summary_enabled=!!($('settingsWhatsNewSummary')||{}).checked;
   body.sound_enabled=!!($('settingsSoundEnabled')||{}).checked;
+  body.rtl=!!($('settingsRtl')||{}).checked;
   body.notifications_enabled=!!($('settingsNotificationsEnabled')||{}).checked;
   body.show_thinking=window._showThinking!==false;
   body.sidebar_density=sidebarDensity;
@@ -5948,7 +6729,7 @@ async function saveSettings(andClose){
           if(typeof showToast==='function') showToast('Failed to update default model — settings saved');
         }
       }
-      _applySavedSettingsUi(saved, body, {sendKey,showTokenUsage,showTps,showCliSessions,theme,skin,language,sidebarDensity,fontSize});
+      _applySavedSettingsUi(saved, body, {sendKey,showTokenUsage,showQuotaChip,showTps,fadeTextEffect,showCliSessions,theme,skin,language,sidebarDensity,fontSize});
       showToast(t(saved.auth_just_enabled?'settings_saved_pw':'settings_saved_pw_updated'));
       _settingsDirty=false;
       _resetSettingsPanelState();
@@ -5967,7 +6748,7 @@ async function saveSettings(andClose){
         if(typeof showToast==='function') showToast('Failed to update default model — settings saved');
       }
     }
-    _applySavedSettingsUi(saved, body, {sendKey,showTokenUsage,showTps,showCliSessions,theme,skin,language,sidebarDensity,fontSize});
+    _applySavedSettingsUi(saved, body, {sendKey,showTokenUsage,showQuotaChip,showTps,fadeTextEffect,showCliSessions,theme,skin,language,sidebarDensity,fontSize});
     showToast(t('settings_saved'));
     _settingsDirty=false;
     _resetSettingsPanelState();
@@ -6166,6 +6947,10 @@ function loadMcpServers(){
   }).catch(()=>{list.innerHTML=`<div class="mcp-error-state" style="color:#ef4444;font-size:12px;padding:6px 0">${esc(t('mcp_load_failed'))}</div>`});
 }
 let _mcpToolsCache=[];
+let _mcpToolsMeta={};
+let _mcpToolsPage=1;
+let _mcpToolsPageSize=5;
+const MCP_TOOLS_PAGE_SIZE_OPTIONS=[5,10,20,40];
 function _filterMcpToolsForSearch(tools, query){
   const q=(query||'').trim().toLowerCase();
   if(!q) return Array.isArray(tools)?tools:[];
@@ -6182,16 +6967,56 @@ function _mcpToolSchemaText(schemaSummary){
     return `${p.name}${req}: ${p.type||'unknown'}${desc}`;
   }).join('\n');
 }
-function _renderMcpTools(tools, query){
-  const list=$('mcpToolList');
-  if(!list) return;
-  const filtered=_filterMcpToolsForSearch(tools, query);
-  if(!filtered.length){
-    const key=query?'mcp_tools_no_matches':'mcp_tools_no_tools';
-    list.innerHTML=`<div class="mcp-tool-empty-state" style="color:var(--muted);font-size:12px;padding:6px 0">${esc(t(key))}</div>`;
+function _mcpToolsSummary(total, filtered, page, pages, query){
+  const trimmedQuery=(query||'').trim();
+  if(!filtered){
+    if(trimmedQuery) return t('mcp_tools_summary_no_matches',trimmedQuery,total);
+    return total?t('mcp_tools_summary_none'):'';
+  }
+  const pageSize=_mcpToolsPageSize||5;
+  const start=(page-1)*pageSize+1;
+  const end=Math.min(filtered,page*pageSize);
+  const searchNote=trimmedQuery?t('mcp_tools_summary_matching',trimmedQuery):'';
+  const totalNote=filtered===total?'':t('mcp_tools_summary_total_note',total);
+  return t('mcp_tools_summary_showing',start,end,filtered,searchNote,totalNote,page,pages);
+}
+function _mcpToolPageSizeControl(){
+  const options=MCP_TOOLS_PAGE_SIZE_OPTIONS.map(size=>`<option value="${size}" ${size===_mcpToolsPageSize?'selected':''}>${size}</option>`).join('');
+  return `<label class="mcp-tool-page-size">${esc(t('mcp_tools_page_size_prefix'))} <select aria-label="${esc(t('mcp_tools_per_page_aria'))}" onchange="setMcpToolsPageSize(this.value)">${options}</select> ${esc(t('mcp_tools_page_size_suffix'))}</label>`;
+}
+function _mcpToolsEmptyMessage(query){
+  const base=esc(t(query?'mcp_tools_no_matches':'mcp_tools_no_tools'));
+  const unavailable=Array.isArray(_mcpToolsMeta.unavailable_servers)?_mcpToolsMeta.unavailable_servers:[];
+  if(query||!unavailable.length) return base;
+  return `${base}<br><span class="mcp-tool-empty-detail">${esc(t('mcp_tools_inactive_configured_servers',unavailable.join(', ')))}</span>`;
+}
+function _renderMcpToolPager(filteredCount, page, pages){
+  const pager=$('mcpToolPager');
+  if(!pager) return;
+  if(pages<=1){
+    pager.innerHTML='';
     return;
   }
-  list.innerHTML=filtered.map(tool=>{
+  pager.innerHTML=`<button type="button" class="mcp-tool-page-btn" onclick="setMcpToolsPage(${page-1})" ${page<=1?'disabled':''} aria-label="${esc(t('mcp_tools_previous_page_aria'))}">${esc(t('mcp_tools_previous_page'))}</button>
+    <span class="mcp-tool-page-label">${page} / ${pages}</span>
+    <button type="button" class="mcp-tool-page-btn" onclick="setMcpToolsPage(${page+1})" ${page>=pages?'disabled':''} aria-label="${esc(t('mcp_tools_next_page_aria'))}">${esc(t('mcp_tools_next_page'))}</button>`;
+}
+function _renderMcpTools(tools, query){
+  const list=$('mcpToolList');
+  const toolbar=$('mcpToolToolbar');
+  if(!list) return;
+  const filtered=_filterMcpToolsForSearch(tools, query);
+  const total=Array.isArray(tools)?tools.length:0;
+  const pages=Math.max(1,Math.ceil(filtered.length/_mcpToolsPageSize));
+  _mcpToolsPage=Math.min(Math.max(1,_mcpToolsPage||1),pages);
+  if(toolbar) toolbar.innerHTML=`<span class="mcp-tool-summary">${esc(_mcpToolsSummary(total,filtered.length,_mcpToolsPage,pages,query))}</span>${_mcpToolPageSizeControl()}`;
+  _renderMcpToolPager(filtered.length,_mcpToolsPage,pages);
+  if(!filtered.length){
+    list.innerHTML=`<div class="mcp-tool-empty-state" style="color:var(--muted);font-size:12px;padding:6px 0">${_mcpToolsEmptyMessage(query)}</div>`;
+    return;
+  }
+  const visible=filtered.slice((_mcpToolsPage-1)*_mcpToolsPageSize,_mcpToolsPage*_mcpToolsPageSize);
+  list.innerHTML=visible.map(tool=>{
     const status=tool.status||'unknown';
     const statusBadge=`<span class="mcp-status-badge mcp-status-${esc(status)}">${esc(_mcpStatusLabel(status))}</span>`;
     const schemaText=_mcpToolSchemaText(tool.schema_summary);
@@ -6206,16 +7031,42 @@ function _renderMcpTools(tools, query){
     </div>`;
   }).join('');
 }
-function filterMcpTools(){
+function setMcpToolsPage(page){
+  _mcpToolsPage=page;
   const input=$('mcpToolSearch');
   _renderMcpTools(_mcpToolsCache,input?input.value:'');
+  const list=$('mcpToolList');
+  if(list) list.scrollTop=0;
+}
+function setMcpToolsPageSize(size){
+  const next=Number(size);
+  if(!MCP_TOOLS_PAGE_SIZE_OPTIONS.includes(next)) return;
+  _mcpToolsPageSize=next;
+  _mcpToolsPage=1;
+  const input=$('mcpToolSearch');
+  _renderMcpTools(_mcpToolsCache,input?input.value:'');
+  const list=$('mcpToolList');
+  if(list) list.scrollTop=0;
+}
+function filterMcpTools(){
+  _mcpToolsPage=1;
+  const input=$('mcpToolSearch');
+  _renderMcpTools(_mcpToolsCache,input?input.value:'');
+  const list=$('mcpToolList');
+  if(list) list.scrollTop=0;
 }
 function loadMcpTools(){
   const list=$('mcpToolList');
+  const toolbar=$('mcpToolToolbar');
+  const pager=$('mcpToolPager');
   if(!list) return;
+  if(toolbar) toolbar.textContent='';
+  if(pager) pager.innerHTML='';
   list.innerHTML=`<div style="color:var(--muted);font-size:12px;padding:6px 0">${esc(t('loading'))}</div>`;
   api('/api/mcp/tools').then(r=>{
     _mcpToolsCache=(r&&Array.isArray(r.tools))?r.tools:[];
+    _mcpToolsMeta=r||{};
+    _mcpToolsPage=1;
     filterMcpTools();
   }).catch(()=>{list.innerHTML=`<div class="mcp-tool-error-state" style="color:#ef4444;font-size:12px;padding:6px 0">${esc(t('mcp_tools_load_failed'))}</div>`});
 }
